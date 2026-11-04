@@ -1,10 +1,11 @@
-// main.ts - the page: the toolbar, the plan view, the properties panel and the status line,
-// and opening and saving maps. It starts with the demo map.
+// main.ts - the page: the toolbar, the plan and 3D views, the properties panel and the status
+// line, and opening and saving maps. It starts with the demo map.
 
 import demoText from '../maps/demo.pmap?raw';
 import { Editor } from './editor/editor';
 import { PropertiesPanel } from './editor/panel';
 import { PlanView } from './editor/plan';
+import { View3D } from './editor/view3d';
 import { docFromMap, type Doc } from './map/edit';
 import { parseMap, writeMap } from './map/format';
 import { toCoord } from './map/units';
@@ -38,12 +39,46 @@ const plan = new PlanView(element<HTMLCanvasElement>('plan'), editor, (text) => 
 });
 const panel = new PropertiesPanel(element<HTMLElement>('panel'), editor);
 
+// the 3D view, or why there isn't one
+let view3d: View3D | undefined;
+try {
+    view3d = new View3D(element<HTMLCanvasElement>('view3d'), editor, plan);
+} catch (error) {
+    const note = document.createElement('div');
+    note.className = 'unavailable';
+    note.textContent = `No 3D view: ${error instanceof Error ? error.message : String(error)}`;
+    element<HTMLElement>('view3dbox').append(note);
+}
+
+// the divider shares the width between the plan and the 3D view
+const divider = element<HTMLElement>('divider');
+const planBox = element<HTMLElement>('planbox');
+const view3dBox = element<HTMLElement>('view3dbox');
+divider.addEventListener('pointerdown', (e) => {
+    divider.setPointerCapture(e.pointerId);
+    const left = planBox.getBoundingClientRect().left;
+    const both = planBox.offsetWidth + view3dBox.offsetWidth;
+    const move = (m: PointerEvent) => {
+        const share = Math.min(0.85, Math.max(0.15, (m.clientX - left) / both));
+        planBox.style.flexGrow = String(share);
+        view3dBox.style.flexGrow = String(1 - share);
+    };
+    const end = () => {
+        divider.removeEventListener('pointermove', move);
+        divider.removeEventListener('pointerup', end);
+    };
+    divider.addEventListener('pointermove', move);
+    divider.addEventListener('pointerup', end);
+});
+
 // ---- toolbar ----
 
 const buttons = {
     place: element<HTMLButtonElement>('place'),
     select: element<HTMLButtonElement>('select'),
     grid: element<HTMLButtonElement>('grid'),
+    cells: element<HTMLButtonElement>('cells'),
+    dither: element<HTMLButtonElement>('dither'),
     undo: element<HTMLButtonElement>('undo'),
     redo: element<HTMLButtonElement>('redo'),
     fit: element<HTMLButtonElement>('fit'),
@@ -59,6 +94,8 @@ function refresh() {
     buttons.select.classList.toggle('on', editor.mode === 'select');
     buttons.grid.classList.toggle('on', editor.gridOn);
     buttons.grid.innerHTML = `Grid ${editor.gridSize}<kbd>G</kbd>`;
+    buttons.cells.classList.toggle('on', editor.showCells);
+    buttons.dither.classList.toggle('on', editor.dither);
     buttons.undo.disabled = !editor.canUndo;
     buttons.redo.disabled = !editor.canRedo;
     fileLabel.textContent = editor.fileName + (editor.modified ? ' (modified)' : '');
@@ -69,6 +106,8 @@ editor.onChange(refresh);
 buttons.place.onclick = () => editor.setMode('place');
 buttons.select.onclick = () => editor.setMode('select');
 buttons.grid.onclick = () => editor.setGrid(!editor.gridOn);
+buttons.cells.onclick = () => editor.setShowCells(!editor.showCells);
+buttons.dither.onclick = () => editor.setDither(!editor.dither);
 buttons.undo.onclick = () => editor.undo();
 buttons.redo.onclick = () => editor.redo();
 buttons.fit.onclick = () => plan.fit();
@@ -151,9 +190,9 @@ if (Array.isArray(demo)) {
 // for poking at from the browser's console, and for scripted checks
 declare global {
     interface Window {
-        portal: { editor: Editor; plan: PlanView; panel: PropertiesPanel };
+        portal: { editor: Editor; plan: PlanView; panel: PropertiesPanel; view3d?: View3D };
     }
 }
-window.portal = { editor, plan, panel };
+window.portal = { editor, plan, panel, view3d };
 refresh();
 requestAnimationFrame(() => plan.fit());

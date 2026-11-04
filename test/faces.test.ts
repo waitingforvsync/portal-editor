@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { docFromMap, type Doc } from '../src/map/edit';
-import { edgeZones, facesBetween } from '../src/map/faces';
+import { edgeZones, facesBetween, placeFaces } from '../src/map/faces';
 import { parseMap } from '../src/map/format';
 import { mapText } from './helpers';
 
@@ -62,5 +62,26 @@ describe('facesBetween', () => {
         expect(facesBetween(map, 0, 0)).toEqual([]);
         expect(facesBetween(map, 3, -1)).toEqual([]);
         expect(facesBetween(map, -1, -1)).toEqual([]);
+    });
+});
+
+describe('placeFaces', () => {
+    const { map } = rooms();
+
+    it('spans a wall from its zone\'s floor to its ceiling, seen from that zone', () => {
+        expect(placeFaces(map, -1, 2)).toEqual([
+            { face: 'wall', bottom: 16, top: 128, seen: 'left' },
+        ]);
+    });
+
+    it('sees a riser from the lower floor and a lintel from the higher ceiling', () => {
+        expect(placeFaces(map, 0, 2)).toEqual([
+            { face: 'riser', bottom: 0, top: 16, seen: 'right' },
+            { face: 'lintel', bottom: 128, top: 160, seen: 'right' },
+        ]);
+        expect(placeFaces(map, 2, 0)).toEqual([
+            { face: 'riser', bottom: 0, top: 16, seen: 'left' },
+            { face: 'lintel', bottom: 128, top: 160, seen: 'left' },
+        ]);
     });
 });

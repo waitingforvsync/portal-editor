@@ -9,6 +9,7 @@ import {
 } from '../map/edit';
 import type { Vertex } from '../map/map';
 import { shadeRgb } from '../map/shades';
+import { zoneCells } from '../map/cells';
 import { COORD_MAX } from '../map/units';
 import { GRID_SIZES, type Editor } from './editor';
 import { hitTest, snapAt, type Hit, type Snap } from './hit';
@@ -25,6 +26,7 @@ const COLOUR = {
     gridMajor: 'rgba(255, 255, 255, 0.09)',
     edge: '#9aa1ad',
     construction: '#6b717c',
+    soft: 'rgba(255, 255, 255, 0.3)',
     vertex: '#d0d4dc',
     selected: '#ffb43c',
     selectedFill: 'rgba(255, 180, 60, 0.22)',
@@ -65,6 +67,11 @@ function sameSnap(a: Snap, b: Snap): boolean {
         && (a.kind === 'point' || (b.kind !== 'point' && a.index === b.index));
 }
 
+// The open zones' cells, which the engine has: a solid zone has none.
+function openCells(doc: Doc): number[][] {
+    return zoneCells(doc).filter((_, z) => !doc.map.zones[z]!.solid).flat();
+}
+
 function css(rgb: readonly number[], alpha: number): string {
     return `rgba(${rgb.map(Math.round).join(', ')}, ${alpha})`;
 }
@@ -76,6 +83,8 @@ export class PlanView {
     private shift = false;
     private frame = 0;
     private hatch: CanvasPattern | null = null;
+    private readonly drawn = new Set<() => void>();
+    hint = '';    // what another view has under the pointer, for the status line
 
     constructor(
         private readonly canvas: HTMLCanvasElement,
@@ -120,6 +129,11 @@ export class PlanView {
         this.view.fit(Math.min(...xs) - pad, Math.min(...ys) - pad,
             Math.max(...xs) + pad, Math.max(...ys) + pad);
         this.redraw();
+    }
+
+    // Hear each time the view draws: its view, or what it shows, may have changed.
+    onDraw(listener: () => void) {
+        this.drawn.add(listener);
     }
 
     redraw() {
@@ -308,6 +322,14 @@ export class PlanView {
             case 'f':
             case 'F':
                 this.fit();
+                break;
+            case 'd':
+            case 'D':
+                editor.setDither(!editor.dither);
+                break;
+            case 'c':
+            case 'C':
+                editor.setShowCells(!editor.showCells);
                 break;
             case 'ArrowUp':
                 this.nudge(step, 0);
@@ -511,7 +533,7 @@ export class PlanView {
     // ---- drawing ----
 
     // What to show: the document, or what an edit under way would make of it.
-    private shown(): { doc: Doc; selection: Selection } {
+    shown(): { doc: Doc; selection: Selection } {
         const g = this.gesture;
         if (g.kind === 'move' && g.result) {
             return { doc: g.result.doc, selection: mapSelection(g.moving, g.result.vertexMap) };
@@ -553,11 +575,13 @@ export class PlanView {
             });
             ctx.closePath();
         };
+        // a zone's cells as one path: they all turn the same way, so it fills without seams
+        const cells = zoneCells(doc);
         const zonePath = (z: number) => {
-            const region = doc.regions[z]!;
             ctx.beginPath();
-            trace(region.perimeter);
-            region.holes.forEach(trace);
+            for (const cell of cells[z]!) {
+                trace(cell);
+            }
         };
 
         // what the pointer is over, when not mid-gesture
@@ -571,17 +595,38 @@ export class PlanView {
         zones.forEach((zone, z) => {
             zonePath(z);
             ctx.fillStyle = zone.solid ? this.solidFill(ctx) : css(shadeRgb(zone.floorShade), 0.5);
-            ctx.fill('evenodd');
+            ctx.fill();
         });
         for (const z of selectedZones(doc, selection)) {
             zonePath(z);
             ctx.fillStyle = COLOUR.selectedFill;
-            ctx.fill('evenodd');
+            ctx.fill();
         }
         if (hover.kind === 'zone') {
             zonePath(hover.index);
             ctx.fillStyle = COLOUR.hoverFill;
-            ctx.fill('evenodd');
+            ctx.fill();
+        }
+
+        // the soft lines between cells, once each
+        if (this.editor.showCells) {
+            const isEdge = new Set(edges.map((e) => Math.min(e.a, e.b) * 4294967296
+                + Math.max(e.a, e.b)));
+            ctx.setLineDash([3, 3]);
+            ctx.strokeStyle = COLOUR.soft;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (const cell of openCells(doc)) {
+                cell.forEach((u, k) => {
+                    const v = cell[(k + 1) % cell.length]!;
+                    if (u < v && !isEdge.has(u * 4294967296 + v)) {
+                        ctx.moveTo(...screen(vertices[u]!));
+                        ctx.lineTo(...screen(vertices[v]!));
+                    }
+                });
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
         }
 
         // edges
@@ -660,6 +705,9 @@ export class PlanView {
             : g.kind === 'move' ? 'move'
             : this.selecting ? 'default' : 'crosshair';
         this.report(this.status(doc, selection, placing));
+        for (const listener of this.drawn) {
+            listener();
+        }
     }
 
     private drawGrid(ctx: CanvasRenderingContext2D) {
@@ -768,7 +816,8 @@ export class PlanView {
         ].join(', ');
         const parts = [
             this.selecting ? 'Select' : 'Place',
-            counts(map.vertices.length, map.edges.length, map.zones.length),
+            counts(map.vertices.length, map.edges.length, map.zones.length)
+                + (editor.showCells ? `, ${count(openCells(doc).length, 'cell', 'cells')}` : ''),
         ];
         if (selection.size) {
             const edges = selectedEdges(doc, selection).length;
@@ -787,6 +836,9 @@ export class PlanView {
         }
         if (g.kind === 'move' && (g.dx || g.dy)) {
             parts.push(`moving ${g.dx}, ${g.dy}`);
+        }
+        if (this.hint) {
+            parts.push(this.hint);
         }
         if (editor.message) {
             parts.push(editor.message);

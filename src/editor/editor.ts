@@ -27,6 +27,8 @@ export class Editor {
     mode: Mode = 'place';
     gridOn = true;
     gridSize = 16;
+    dither = true;       // the 3D view in the engine's dithers, else their average colours
+    showCells = false;   // the plan shows the soft lines between zones' convex cells
     fileName = 'untitled.pmap';
     modified = false;
     message = '';    // shown in the status line until the next press in the plan
@@ -139,6 +141,16 @@ export class Editor {
 
     setMode(mode: Mode) {
         this.mode = mode;
+        this.changed();
+    }
+
+    setShowCells(on: boolean) {
+        this.showCells = on;
+        this.changed();
+    }
+
+    setDither(on: boolean) {
+        this.dither = on;
         this.changed();
     }
 
