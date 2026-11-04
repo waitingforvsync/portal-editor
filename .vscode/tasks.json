@@ -1,0 +1,60 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "install",
+            "detail": "Install the dependencies (npm install)",
+            "type": "shell",
+            "command": "npm install",
+            "problemMatcher": []
+        },
+        {
+            "label": "dev",
+            "detail": "Serve the editor at http://localhost:5173, reloading on change",
+            "type": "shell",
+            "command": "npx vite",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "vite",
+                "pattern": {
+                    "regexp": "^never matches$"
+                },
+                "background": {
+                    "activeBegins": true,
+                    "beginsPattern": "VITE",
+                    "endsPattern": "ready in"
+                }
+            }
+        },
+        {
+            "label": "check",
+            "detail": "Type-check, errors to the Problems panel",
+            "type": "shell",
+            "command": "npx tsc --pretty false",
+            "problemMatcher": "$tsc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build",
+            "detail": "Type-check, then build into dist/",
+            "type": "shell",
+            "command": "npx tsc --pretty false && npx vite build",
+            "problemMatcher": "$tsc",
+            "group": "build"
+        },
+        {
+            "label": "test",
+            "detail": "Run the tests once",
+            "type": "shell",
+            "command": "npx vitest run",
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        }
+    ]
+}

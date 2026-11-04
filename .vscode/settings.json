@@ -1,0 +1,14 @@
+{
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.rulers": [100],
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "files.eol": "\n",
+    "typescript.preferences.quoteStyle": "single",
+    "typescript.preferences.importModuleSpecifier": "relative",
+    "search.exclude": {
+        "dist": true
+    }
+}

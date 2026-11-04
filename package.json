@@ -1,0 +1,19 @@
+{
+    "name": "portal-editor",
+    "private": true,
+    "version": "0.0.0",
+    "description": "A browser map editor for the portalc BBC Micro portal engine",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "check": "tsc",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "devDependencies": {
+        "typescript": "^7.0.2",
+        "vite": "^8.3.5",
+        "vitest": "^5.1.0"
+    }
+}
