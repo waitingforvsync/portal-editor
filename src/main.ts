@@ -1,5 +1,5 @@
 // main.ts - the page: the toolbar, the plan and 3D views, the properties panel and the status
-// line, and opening and saving maps. It starts with the demo map.
+// line; and opening, saving and exporting maps. It starts with the demo map.
 
 import demoText from '../maps/demo.pmap?raw';
 import { Editor } from './editor/editor';
@@ -7,6 +7,7 @@ import { PropertiesPanel } from './editor/panel';
 import { PlanView } from './editor/plan';
 import { View3D } from './editor/view3d';
 import { docFromMap, type Doc } from './map/edit';
+import { exportMap } from './map/export';
 import { parseMap, writeMap } from './map/format';
 import { toCoord } from './map/units';
 
@@ -85,6 +86,7 @@ const buttons = {
     new: element<HTMLButtonElement>('new'),
     open: element<HTMLButtonElement>('open'),
     save: element<HTMLButtonElement>('save'),
+    export: element<HTMLButtonElement>('export'),
 };
 const fileLabel = element<HTMLElement>('file');
 const picker = element<HTMLInputElement>('picker');
@@ -151,20 +153,41 @@ picker.onchange = async () => {
     plan.fit();
 };
 
-function save() {
-    const blob = new Blob([writeMap(editor.doc.map)], { type: 'text/plain' });
+// Hand the browser a file to save.
+function download(name: string, data: BlobPart, type: string) {
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = editor.fileName;
+    link.href = URL.createObjectURL(new Blob([data], { type }));
+    link.download = name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function save() {
+    download(editor.fileName, writeMap(editor.doc.map), 'text/plain');
     editor.modified = false;
     editor.changed();
+}
+
+// The map as the engine loads it (docs/export.md), or why it can't be.
+function exportBinary() {
+    const result = exportMap(editor.doc);
+    if (!result.ok) {
+        const shown = result.errors.slice(0, 12).join('\n');
+        const more = result.errors.length > 12 ? '\n...' : '';
+        window.alert(`${editor.fileName} doesn't export:\n\n${shown}${more}`);
+        return;
+    }
+    const name = editor.fileName.replace(/\.pmap$/i, '') + '.bin';
+    download(name, result.bytes, 'application/octet-stream');
+    const { vertices, cells, edges, sides } = result.engine;
+    editor.tell(`exported ${name}: ${vertices.length} vertices, ${cells.length - 1} cells, `
+        + `${edges.length} edges, ${sides.length} sides, ${result.bytes.length} bytes`);
 }
 
 buttons.new.onclick = newMap;
 buttons.open.onclick = open;
 buttons.save.onclick = save;
+buttons.export.onclick = exportBinary;
 window.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         const key = e.key.toLowerCase();
@@ -174,6 +197,9 @@ window.addEventListener('keydown', (e) => {
         } else if (key === 'o') {
             e.preventDefault();
             open();
+        } else if (key === 'e') {
+            e.preventDefault();
+            exportBinary();
         }
     }
 });

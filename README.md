@@ -6,8 +6,9 @@ zones, with floor and ceiling heights and shades.
 
 So far: the map text format (reading, checking and writing); a plan view for placing
 vertices, drawing edges, and selecting, moving and deleting them, with the zones and their
-convex cells worked out as you go; a 3D view of the map as the engine draws it; and a
-properties panel for the selected zones, edges and vertices. It opens on the demo map.
+convex cells worked out as you go; a 3D view of the map as the engine draws it; a
+properties panel for the selected zones, edges and vertices; and an export of the map as the
+engine loads it. It opens on the demo map.
 
 ## Running
 
@@ -84,6 +85,7 @@ zone doesn't select what's inside it.
 | Wheel | Zooms about the pointer |
 | Right or middle drag | Pans |
 | Ctrl+O, Ctrl+S | Opens a map; saves it (as a download) |
+| Ctrl+E | Exports the map as the engine loads it (as a download) |
 
 ### Properties panel
 
@@ -155,6 +157,15 @@ and keeping the fewest cells. The diagonals left are the soft edges. Both views 
 from their cells; C shows the soft lines in the plan, and the cell count in the status line.
 The demo map's open zones make 26 cells (portalc's hand-built scene has 27).
 
+### Export
+
+Export (Ctrl+E) saves the map as the engine loads it, as the map's name with `.bin`: its
+open zones' convex cells, their sides and edges, the vertices they use, and the start, as
+`docs/export.md` lays out. The status line gives the counts and the size. A map that can't
+be exported (more than 256 of anything, an edge 2048 units long or more, heights spanning
+more than 255 steps of 8, or a start outside every open zone) is refused, with each reason
+listed.
+
 ### Snapping and edits
 
 A new vertex, the end of a drawn edge, or a moved selection's grabbed vertex snaps to the
@@ -177,8 +188,9 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | Path | What |
 |------|------|
 | `docs/format.md` | The map text format |
+| `docs/export.md` | The export the engine loads |
 | `maps/demo.pmap` | portalc's demo scene |
-| `src/main.ts` | The page: toolbar, plan view, properties panel, status line, opening and saving |
+| `src/main.ts` | The page: toolbar, the two views, panel, status line; opening, saving, exporting |
 | `src/map/units.ts` | Coordinate and height types, and their checks |
 | `src/map/map.ts` | The map: vertices, edges, zones, start |
 | `src/map/shades.ts` | The engine's 35-shade catalogue |
@@ -192,6 +204,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/map/faces.ts` | What an edge draws: wall, riser or lintel |
 | `src/map/triangulate.ts` | A region cut into triangles |
 | `src/map/cells.ts` | Zones cut into convex cells |
+| `src/map/export.ts` | The map as the engine loads it |
 | `src/editor/view.ts` | The plan view's pan and zoom |
 | `src/editor/hit.ts` | What's under the pointer, and snapping |
 | `src/editor/selection.ts` | Edges and zones selected through their vertices |
