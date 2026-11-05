@@ -110,18 +110,15 @@ export function lab([r, g, b]: readonly number[]): [number, number, number] {
 // full on or off, so that's the average of their channels.
 const SHADE_LAB = TABLE.map((_, i) => lab(shadeRgb(i).map((c) => c / 255)));
 
-// The shade that looks most like a colour given in linear light (each channel 0 to 1): the
-// nearest in CIELAB.
-export function nearestShade(linear: readonly [number, number, number]): number {
+// Every shade, the most like a colour given in linear light (each channel 0 to 1) first: by
+// distance in CIELAB.
+export function shadesByLikeness(linear: readonly [number, number, number]): number[] {
     const [l, a, b] = lab(linear);
-    let best = 0;
-    let bestDistance = Infinity;
-    SHADE_LAB.forEach(([sl, sa, sb], i) => {
-        const d = (sl - l) ** 2 + (sa - a) ** 2 + (sb - b) ** 2;
-        if (d < bestDistance) {
-            best = i;
-            bestDistance = d;
-        }
-    });
-    return best;
+    const distance = SHADE_LAB.map(([sl, sa, sb]) => (sl - l) ** 2 + (sa - a) ** 2 + (sb - b) ** 2);
+    return distance.map((_, i) => i).sort((p, q) => distance[p]! - distance[q]! || p - q);
+}
+
+// The shade that looks most like a colour given in linear light.
+export function nearestShade(linear: readonly [number, number, number]): number {
+    return shadesByLikeness(linear)[0]!;
 }

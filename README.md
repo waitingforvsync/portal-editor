@@ -224,17 +224,23 @@ git ignores them, so they stay out of this repository.
   room to open is solid.
 - **Shades.** Each surface starts from its flat's or texture's average colour: a wall's
   middle texture, a lintel's upper texture on the side it's seen from (the sky, between two
-  skies), a riser's lower texture on its side, a sky ceiling the sky's. Doom's colours are
-  dark and mostly near grey, while the shades are one grey and the rest pure colours, the
-  purest the brightest, so the level's colours are spread over them (`src/doom/colour.ts`):
-  - a colour as saturated as the level's middling ones takes its hue (as the eye sees it)
-    at full saturation, while near-greys stay grey;
-  - lightness goes by rank among the level's surfaces;
-  - the colours least like the level's average go towards full light: the acid among
-    E1M1's browns becomes bright green.
+  skies), a riser's lower texture on its side, a sky ceiling the sky's. The shades can't
+  follow Doom's browns and greys, so a level is recoloured in what they do well: blues,
+  purples and reds, and dark and olive greens (`src/doom/colour.ts`). A surface's colour
+  sets its family and lightness, not its exact hue:
+  - greenish colours take the greens, bluish ones the blues and strong reds the reds; greys
+    and browns take a ramp from blue in the dark, through purple, to red in the light;
+  - lightness goes by rank among the level's surfaces, kept dark;
+  - the greens, blues and reds least like the level's average glow, pure and at full light:
+    the acid among E1M1's browns is bright green.
 - **Lighting.** Floors take all the light, from above; ceilings less; walls, lintels and
-  risers more the more squarely they face the north-west. Then each surface takes the
-  nearest shade in CIELAB.
+  risers more the more squarely they face the north-west.
+- **Neighbours apart.** The engine draws a line only where the shade changes, so surfaces
+  that meet must differ. Largest first, each surface takes the shade most like its colour,
+  from its family while it can, that none of its neighbours has (`src/map/distinct.ts`):
+  a zone's floor and ceiling and the faces round it, the floors (or ceilings) at a riser's
+  (or lintel's) foot and top, level floors and ceilings across an edge, and faces meeting
+  at a corner.
 - **The start** is player 1's, facing the same way.
 
 Things other than the start, lighting, specials and tags aren't imported. Most of Doom's
@@ -280,6 +286,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/map/triangulate.ts` | A region cut into triangles |
 | `src/map/cells.ts` | Zones cut into convex cells |
 | `src/map/export.ts` | The map as the engine loads it |
+| `src/map/distinct.ts` | Shades that keep neighbouring surfaces apart |
 | `src/editor/view.ts` | The plan view's pan and zoom |
 | `src/editor/hit.ts` | What's under the pointer, and snapping |
 | `src/editor/selection.ts` | Edges and zones selected through their vertices |
@@ -292,6 +299,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/editor/view3d.ts` | The 3D view: drawing, and pointer handling |
 | `src/doom/wad.ts` | Reading Doom's WADs: levels, the palette, flats' and textures' colours |
 | `src/doom/level.ts` | A Doom level as a map |
+| `src/doom/colour.ts` | The colours an imported level's surfaces want |
 | `test/` | Tests, one file per module |
 
 In the browser's console, `portal.editor`, `portal.plan`, `portal.view3d` and `portal.panel`

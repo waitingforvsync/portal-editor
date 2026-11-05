@@ -1,13 +1,14 @@
 // level.ts - a Doom level as a map. Its linedefs become edges, between only the vertices they
 // use (not those the node builder added for its splits), and each region they enclose becomes
 // a zone with its sector's heights. A sector in several pieces gives a zone each; a region
-// with no sector, such as the inside of a pillar, is solid. Each surface's shade comes from
-// its flat's or texture's average colour, spread over the shades and lit by the way it faces
-// (colour.ts). Doom's map is scaled up by SCALE, bringing its eye height (41) near the
-// engine's (80), and laid out as Doom's automap shows it, north up the page and east to the
-// right.
+// with no sector, such as the inside of a pillar, is solid. Each surface's flat or texture
+// sets the colour it wants (colour.ts), and it takes the shade most like that which none of
+// its neighbours has (distinct.ts). Doom's map is scaled up by SCALE, bringing its eye height
+// (41) near the engine's (80), and laid out as Doom's automap shows it, north up the page and
+// east to the right.
 
-import type { Doc, EdgeStyle } from '../map/edit';
+import type { Doc } from '../map/edit';
+import { distinctShades, type Want } from '../map/distinct';
 import { docFromMap } from '../map/edit';
 import { checkMap } from '../map/check';
 import type { Edge, PortalMap, Zone } from '../map/map';
@@ -15,7 +16,7 @@ import { planarize, type DraftEdge } from '../map/planarize';
 import { findRegions } from '../map/regions';
 import { ANGLE_STEPS, COORD_MAX, HEIGHT_STEP, toCoord, toHeight } from '../map/units';
 import type { ZoneStyle } from '../map/zones';
-import { shadeSurfaces, type Direction, type Surface } from './colour';
+import { surfaceWants, type Direction, type Surface } from './colour';
 import {
     flatColour, NO_TEXTURE, readLevel, readPalette, SKY_FLAT, textureColours,
     type DoomVertex, type Linedef, type Linear, type Sidedef, type Wad,
@@ -195,7 +196,7 @@ export function importLevel(wad: Wad, name: string): Imported {
         return { top, bottom: riser };
     };
 
-    // ---- shades: every surface's, spread over the shades together ----
+    // ---- what every surface wants, worked out together ----
 
     const surfaces: Surface[] = [];
     const add = (surface: Surface) => surfaces.push(surface) - 1;
@@ -208,16 +209,8 @@ export function importLevel(wad: Wad, name: string): Imported {
         const { top, bottom } = faces(l);
         return { top: add(top), bottom: bottom && add(bottom) };
     });
-    const shades = shadeSurfaces(surfaces);
-    styles.forEach((style, i) => {
-        style.floorShade = shades[sectorSurfaces[i]!.floor]!;
-        style.ceilingShade = shades[sectorSurfaces[i]!.ceiling]!;
-    });
-    const edgeStyle = (k: number): EdgeStyle => {
-        const { top, bottom } = lineSurfaces[k]!;
-        const topShade = shades[top]!;
-        return { topShade, bottomShade: bottom === undefined ? topShade : shades[bottom]! };
-    };
+    const wants = surfaceWants(surfaces);
+    const lineOf = new Map(lines.map(({ i }, k) => [i, k]));
 
     // ---- vertices: those the lines use, scaled, north up the page ----
 
@@ -240,8 +233,9 @@ export function importLevel(wad: Wad, name: string): Imported {
             + `${COORD_MAX}`);
     }
     const index = new Map(used.map((v, i) => [v, i]));
-    const draft: DraftEdge[] = lines.map(({ l, i }, k) => ({
-        a: index.get(l.v1)!, b: index.get(l.v2)!, ...edgeStyle(k), source: i, rank: 1, tags: 0,
+    const draft: DraftEdge[] = lines.map(({ l, i }) => ({
+        a: index.get(l.v1)!, b: index.get(l.v2)!, topShade: 0, bottomShade: 0,    // chosen below
+        source: i, rank: 1, tags: 0,
     }));
     const planar = planarize(placed.map((p) => ({ x: toCoord(p.x), y: toCoord(p.y) })), draft);
     if (planar.vertices.length !== placed.length || planar.edges.length !== draft.length) {
@@ -258,6 +252,7 @@ export function importLevel(wad: Wad, name: string): Imported {
     const edgeAt = new Map(planar.edges.map((e, k) => [pairKey(e.a, e.b), k]));
     const pieces = sectors.map(() => 0);
     let voids = 0;
+    const zoneSectors: number[] = [];    // each zone's sector, or for a solid one its neighbour's
     const zones: Zone[] = found.regions.map((region) => {
         // each boundary step has the region on its right, as a linedef has its front side
         const votes = new Map<number, number>();
@@ -280,9 +275,9 @@ export function importLevel(wad: Wad, name: string): Imported {
         const sector = most(votes);
         if (sector === undefined) {
             voids++;
-            const beside = most(across);
-            const style = beside === undefined ? styles[0]! : styles[beside]!;
-            return { ...style, solid: true, perimeter: region.perimeter };
+            const beside = most(across) ?? 0;
+            zoneSectors.push(beside);
+            return { ...styles[beside]!, solid: true, perimeter: region.perimeter };
         }
         if ([...votes.keys()].filter((s) => s >= 0).length > 1) {
             notes.push(`a region of sector ${sector} also borders sectors `
@@ -290,6 +285,7 @@ export function importLevel(wad: Wad, name: string): Imported {
                 + `side: taken as sector ${sector}`);
         }
         pieces[sector]!++;
+        zoneSectors.push(sector);
         return { ...styles[sector]!, perimeter: region.perimeter };
     });
     const split = pieces.filter((n) => n > 1).length;
@@ -312,7 +308,7 @@ export function importLevel(wad: Wad, name: string): Imported {
     }
     // Doom's angle runs anticlockwise from east; the engine's clockwise from north (up)
     const turn = player ? Math.round(64 - player.angle * ANGLE_STEPS / 360) : 0;
-    const map: PortalMap = {
+    const unshaded: PortalMap = {
         start: {
             x: toCoord(Math.min(COORD_MAX, Math.max(0, at.x))),
             y: toCoord(Math.min(COORD_MAX, Math.max(0, at.y))),
@@ -322,6 +318,19 @@ export function importLevel(wad: Wad, name: string): Imported {
         edges,
         zones,
     };
+
+    // ---- shades: what each surface wants, unlike its neighbours' ----
+
+    const lineWants = (source: number): { top: Want; bottom: Want } => {
+        const { top, bottom } = lineSurfaces[lineOf.get(source)!]!;
+        return { top: wants[top]!, bottom: wants[bottom ?? top]! };
+    };
+    const map = distinctShades(unshaded, found.regions, {
+        floors: zoneSectors.map((s) => wants[sectorSurfaces[s]!.floor]!),
+        ceilings: zoneSectors.map((s) => wants[sectorSurfaces[s]!.ceiling]!),
+        tops: planar.edges.map((e) => lineWants(e.source).top),
+        bottoms: planar.edges.map((e) => lineWants(e.source).bottom),
+    });
     const check = checkMap(map);
     if (check.errors.length) {
         throw new Error(`level ${name} doesn't make a good map: ${check.errors.join('; ')}`);
