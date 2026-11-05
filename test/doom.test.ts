@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { lighting, surfaceWants, type Surface } from '../src/doom/colour';
 import { importLevel, SCALE } from '../src/doom/level';
-import { levelNames, readLevel, readWad } from '../src/doom/wad';
+import { levelNames, levelSize, readLevel, readWad } from '../src/doom/wad';
 import { checkMap } from '../src/map/check';
 import type { Want } from '../src/map/distinct';
 import { zoneAt } from '../src/editor/hit';
@@ -158,6 +158,10 @@ describe('readWad', () => {
         expect(level.linedefs[0]!.back).toBe(-1);
         expect(level.sidedefs[1]).toMatchObject({ upper: 'RED', lower: 'GREEN', sector: 0 });
         expect(level.things[0]).toMatchObject({ x: 128, y: 32, angle: 90, type: 1 });
+    });
+
+    it('gives a level\'s size from its lumps', () => {
+        expect(levelSize(readWad(TEST_WAD), 'E1M1')).toEqual({ linedefs: 18, sectors: 3 });
     });
 });
 

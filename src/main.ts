@@ -1,14 +1,15 @@
 // main.ts - the page: the toolbar, the plan and 3D views, the properties panel and the status
 // line; and opening, saving and exporting maps. It starts with the demo map. Opening a Doom
-// WAD imports its first level.
+// WAD imports the level chosen from it.
 
 import demoText from '../maps/demo.pmap?raw';
 import { Editor } from './editor/editor';
 import { PropertiesPanel } from './editor/panel';
 import { PlanView } from './editor/plan';
 import { View3D } from './editor/view3d';
+import { chooseLevel } from './editor/levels';
 import { importLevel } from './doom/level';
-import { levelNames, readWad } from './doom/wad';
+import { levelNames, levelSize, readWad } from './doom/wad';
 import { docFromMap, type Doc } from './map/edit';
 import { exportMap } from './map/export';
 import { parseMap, writeMap } from './map/format';
@@ -149,13 +150,19 @@ function open() {
     }
 }
 
-// A Doom WAD's first level, as a map named after it.
+// A level from a Doom WAD, as a map named after it: the one level, or the one chosen.
 async function importWad(file: File) {
     try {
         const wad = readWad(new Uint8Array(await file.arrayBuffer()));
-        const [level] = levelNames(wad);
-        if (!level) {
+        const names = levelNames(wad);
+        if (!names.length) {
             throw new Error(`it has no levels`);
+        }
+        const level = names.length === 1 ? names[0]
+            : await chooseLevel(`Import a level from ${file.name}`,
+                names.map((name) => ({ name, ...levelSize(wad, name) })));
+        if (!level) {
+            return;
         }
         const { doc, notes } = importLevel(wad, level);
         editor.load(doc, `${level.toLowerCase()}.pmap`);

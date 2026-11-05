@@ -134,6 +134,16 @@ export function levelNames(wad: Wad): string[] {
         .map((l) => l.name);
 }
 
+// A level's size, from its lumps' sizes: how many linedefs and sectors it has.
+export function levelSize(wad: Wad, name: string): { linedefs: number; sectors: number } {
+    const marker = wad.lumps.findIndex((l) => l.name === name);
+    const count = (part: string, size: number) => {
+        const lump = wad.lumps.slice(marker + 1, marker + 12).find((l) => l.name === part);
+        return lump ? Math.floor(lump.data.byteLength / size) : 0;
+    };
+    return { linedefs: count('LINEDEFS', 14), sectors: count('SECTORS', 26) };
+}
+
 function records<T>(lump: Lump | undefined, size: number, read: (at: number) => T): T[] {
     if (!lump) {
         return [];

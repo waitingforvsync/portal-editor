@@ -213,8 +213,10 @@ listed.
 
 ### Importing Doom levels
 
-Opening a Doom WAD (`.wad`) imports its first level (E1M1 in Doom's), named after it, such as
-`e1m1.pmap`. The console lists what the import changed or left out. WADs are id Software's:
+Opening a Doom WAD (`.wad`) asks which of its levels to import: a dialog lists them by
+episode, each with its numbers of lines and sectors, and Esc or Cancel imports none. (A WAD
+with one level imports it straight away.) The map is named after the level, such as
+`e1m1.pmap`, and the console lists what the import changed or left out. WADs are id Software's:
 git ignores them, so they stay out of this repository.
 
 - **Geometry.** Each linedef becomes an edge, between only the vertices linedefs use: the
@@ -302,6 +304,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/editor/scene.ts` | The map's surfaces in 3D, and picking them |
 | `src/editor/renderer.ts` | Drawing the surfaces with WebGL2 |
 | `src/editor/view3d.ts` | The 3D view: drawing, and pointer handling |
+| `src/editor/levels.ts` | The dialog asking which of a WAD's levels to import |
 | `src/doom/wad.ts` | Reading Doom's WADs: levels, the palette, flats' and textures' colours |
 | `src/doom/level.ts` | A Doom level as a map |
 | `src/doom/colour.ts` | The colours an imported level's surfaces want |

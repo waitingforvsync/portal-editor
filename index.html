@@ -248,6 +248,68 @@
             color: var(--dim);
             white-space: pre;
         }
+        .level-picker {
+            padding: 14px 18px;
+            color: var(--text);
+            background: var(--panel);
+            border: 1px solid #3a3f48;
+            border-radius: 6px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+        }
+        .level-picker::backdrop {
+            background: rgba(0, 0, 0, 0.5);
+        }
+        .level-picker h2 {
+            margin: 0 0 6px;
+            font-size: 15px;
+        }
+        .level-picker h3 {
+            margin: 12px 0 6px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--dim);
+        }
+        .level-picker .levels {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 6px;
+            width: min(800px, 80vw);
+        }
+        .level-picker button {
+            font: inherit;
+            color: var(--text);
+            background: #262a31;
+            border: 1px solid #343944;
+            border-radius: 4px;
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+        .level-picker button:hover, .level-picker button:focus-visible {
+            background: #2e333b;
+            border-color: var(--accent);
+            outline: none;
+        }
+        .level-picker button.level {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .level-picker .name {
+            font-weight: 600;
+        }
+        .level-picker .size {
+            font-size: 11px;
+            color: var(--dim);
+        }
+        .level-picker .footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 14px;
+        }
         #status {
             padding: 5px 10px;
             border-top: 1px solid var(--line);
@@ -283,7 +345,7 @@
         </div>
         <div class="group">
             <button id="new" title="Start a new map">New</button>
-            <button id="open" title="Open a map (Ctrl+O), or a Doom WAD to import its first level">Open</button>
+            <button id="open" title="Open a map (Ctrl+O), or a Doom WAD to import one of its levels">Open</button>
             <button id="save" title="Save the map (Ctrl+S)">Save</button>
             <button id="export" title="Export the map as the engine loads it (Ctrl+E)">Export</button>
         </div>
