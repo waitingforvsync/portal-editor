@@ -1,18 +1,20 @@
 // plan.ts - the plan view: draws the map from above, and turns the pointer and keys into
-// edits. Placement mode places vertices and draws edges; selection mode selects and moves
-// them. Holding Shift selects in either mode, adding to the selection. While an edge is drawn
-// or a selection moved, the view shows what committing it there would make, snapped.
+// edits. Geometry mode places vertices and draws edges; selection mode selects and moves
+// them; player mode puts the start and aims it. Holding Shift selects in geometry mode,
+// adding to the selection. Player mode has no selection: it's kept, unseen, for the other
+// modes. While an edge is drawn, a selection moved or the start put, the view shows what
+// committing it there would make, snapped.
 
 import {
-    addEdge, addVertex, deleteEdges, deleteVertices, moveVertices,
+    addEdge, addVertex, deleteEdges, deleteVertices, moveVertices, setStart,
     type Doc, type EditResult, type Endpoint,
 } from '../map/edit';
-import type { Vertex } from '../map/map';
+import type { Start, Vertex } from '../map/map';
 import { shadeRgb } from '../map/shades';
 import { zoneCells } from '../map/cells';
-import { COORD_MAX } from '../map/units';
-import { GRID_SIZES, type Editor } from './editor';
-import { hitTest, snapAt, type Hit, type Snap } from './hit';
+import { ANGLE_STEPS, COORD_MAX } from '../map/units';
+import { ANGLE_SNAP, GRID_SIZES, type Editor } from './editor';
+import { hitTest, roundToGrid, snapAt, type Hit, type Snap } from './hit';
 import {
     isSelected, mapSelection, selectedEdges, selectedZones, verticesOf, type Selection,
 } from './selection';
@@ -50,7 +52,10 @@ type Gesture =
         kind: 'move'; base: Doc; moving: Selection; anchor: Vertex; grab: WorldPoint;
         target?: Snap; dx: number; dy: number; result?: EditResult;
     }
-    | { kind: 'box'; sx0: number; sy0: number; sx1: number; sy1: number; adding: boolean };
+    | { kind: 'box'; sx0: number; sy0: number; sx1: number; sy1: number; adding: boolean }
+    | { kind: 'player'; sx: number; sy: number; start: Start; aiming: boolean; doc: Doc };
+
+const NOTHING: Selection = new Set();
 
 function endpoint(snap: Snap): Endpoint {
     switch (snap.kind) {
@@ -162,7 +167,12 @@ export class PlanView {
     }
 
     private get selecting(): boolean {
-        return this.editor.mode === 'select' || this.shift;
+        const { mode } = this.editor;
+        return mode === 'select' || (mode === 'geometry' && this.shift);
+    }
+
+    private get playing(): boolean {
+        return this.editor.mode === 'player';
     }
 
     private pointerDown(e: PointerEvent) {
@@ -174,6 +184,12 @@ export class PlanView {
         }
         if (e.button === 1 || e.button === 2) {
             this.gesture = { kind: 'pan', sx, sy };
+        } else if (e.button === 0 && this.playing) {
+            const { doc, grid } = this.editor;
+            const at = roundToGrid(this.view.toWorld(sx, sy), grid);
+            const start = { ...at, angle: doc.map.start.angle };
+            this.gesture = { kind: 'player', sx, sy, start, aiming: false, doc };
+            this.updatePlayer(this.gesture, sx, sy);
         } else if (e.button === 0) {
             const { doc } = this.editor;
             this.gesture = {
@@ -215,6 +231,9 @@ export class PlanView {
                 g.sx1 = sx;
                 g.sy1 = sy;
                 break;
+            case 'player':
+                this.updatePlayer(g, sx, sy);
+                break;
         }
         this.redraw();
     }
@@ -245,6 +264,9 @@ export class PlanView {
             case 'box':
                 this.boxSelect(g);
                 break;
+            case 'player':
+                this.putStart(g.start.x, g.start.y, g.start.angle);
+                break;
         }
         this.redraw();
     }
@@ -260,6 +282,8 @@ export class PlanView {
             this.updateDraw(g, sx, sy);
         } else if (g.kind === 'move') {
             this.updateMove(g, sx, sy);
+        } else if (g.kind === 'player') {
+            this.updatePlayer(g, sx, sy);
         }
         this.redraw();
     }
@@ -299,28 +323,28 @@ export class PlanView {
         }
         const step = editor.grid || 1;
         switch (e.key) {
-            case 'p':
-            case 'P':
-                editor.setMode('place');
+            case 'g':
+            case 'G':
+                editor.setMode('geometry');
                 break;
             case 's':
             case 'S':
                 editor.setMode('select');
                 break;
+            case 'p':
+            case 'P':
+                editor.setMode('player');
+                break;
             case 'Escape':
-                if (this.gesture.kind === 'idle') {
-                    editor.select([]);
-                } else {
+                if (this.gesture.kind !== 'idle') {
                     this.cancel();
+                } else if (!this.playing) {
+                    editor.select([]);
                 }
                 break;
             case 'Delete':
             case 'Backspace':
                 this.deleteSelection();
-                break;
-            case 'g':
-            case 'G':
-                editor.setGrid(!editor.gridOn);
                 break;
             case '[':
             case ']': {
@@ -385,7 +409,7 @@ export class PlanView {
         }
     }
 
-    // A click in placement mode: select a vertex, or add one where it snaps.
+    // A click in geometry mode: select a vertex, or add one where it snaps.
     private place(snap: Snap) {
         const { editor } = this;
         if (snap.kind === 'vertex') {
@@ -502,11 +526,46 @@ export class PlanView {
         editor.select(g.adding ? [...editor.selection, ...inside] : inside);
     }
 
+    // The start where a press put it, aimed at the pointer once it's dragged: to the nearest
+    // ANGLE_SNAP with the grid on.
+    private updatePlayer(g: Extract<Gesture, { kind: 'player' }>, sx: number, sy: number) {
+        g.aiming ||= Math.hypot(sx - g.sx, sy - g.sy) >= DRAG_START;
+        let { angle } = g.start;
+        if (g.aiming) {
+            const p = this.view.toWorld(sx, sy);
+            const turns = Math.atan2(p.y - g.start.y, p.x - g.start.x) / (2 * Math.PI);
+            const snap = this.editor.gridOn ? ANGLE_SNAP : 1;
+            angle = Math.round(turns * ANGLE_STEPS / snap) * snap;
+            angle = ((angle % ANGLE_STEPS) + ANGLE_STEPS) % ANGLE_STEPS;
+        }
+        if (g.doc === this.editor.doc || angle !== g.start.angle) {
+            g.start = { ...g.start, angle };
+            g.doc = setStart(this.editor.doc, g.start.x, g.start.y, angle);
+        }
+    }
+
+    // Put the start somewhere, if that's a change.
+    private putStart(x: number, y: number, angle: number) {
+        const { editor } = this;
+        const now = editor.doc.map.start;
+        if (x === now.x && y === now.y && angle === now.angle) {
+            return;
+        }
+        try {
+            editor.commit(setStart(editor.doc, x, y, angle), editor.selection);
+        } catch (error) {
+            if (!(error instanceof RangeError)) {
+                throw error;
+            }
+            editor.tell(`refused: ${error.message}`);
+        }
+    }
+
     // Delete the selected edges, leaving their vertices selected; with none, the vertices.
     private deleteSelection() {
         const { editor } = this;
         const { doc, selection } = editor;
-        if (this.gesture.kind !== 'idle' || selection.size === 0) {
+        if (this.gesture.kind !== 'idle' || selection.size === 0 || this.playing) {
             return;
         }
         const edges = selectedEdges(doc, selection);
@@ -519,10 +578,20 @@ export class PlanView {
         }
     }
 
+    // Nudge the selection, or in player mode the start, kept on the map.
     private nudge(dx: number, dy: number) {
         const { editor } = this;
         const { doc, selection } = editor;
-        if (this.gesture.kind !== 'idle' || selection.size === 0) {
+        if (this.gesture.kind !== 'idle') {
+            return;
+        }
+        if (this.playing) {
+            const { start } = doc.map;
+            const on = (n: number) => Math.min(COORD_MAX, Math.max(0, n));
+            this.putStart(on(start.x + dx), on(start.y + dy), start.angle);
+            return;
+        }
+        if (selection.size === 0) {
             return;
         }
         for (const v of selection) {
@@ -550,7 +619,10 @@ export class PlanView {
         if (g.kind === 'draw' && g.result) {
             return { doc: g.result.doc, selection: new Set(g.result.drawn) };
         }
-        return { doc: this.editor.doc, selection: this.editor.selection };
+        if (g.kind === 'player') {
+            return { doc: g.doc, selection: NOTHING };
+        }
+        return { doc: this.editor.doc, selection: this.playing ? NOTHING : this.editor.selection };
     }
 
     private measure() {
@@ -597,8 +669,11 @@ export class PlanView {
         const idle = this.gesture.kind === 'idle' && this.pointer !== undefined;
         const hover: Hit = idle && this.selecting
             ? hitTest(doc, view, this.pointer!.sx, this.pointer!.sy, true) : { kind: 'none' };
-        const placing: Snap | undefined = idle && !this.selecting
+        const placing: Snap | undefined = idle && !this.selecting && !this.playing
             ? snapAt(doc, view, this.pointer!.sx, this.pointer!.sy, this.editor.grid) : undefined;
+        const putting: Vertex | undefined = idle && this.playing
+            ? roundToGrid(view.toWorld(this.pointer!.sx, this.pointer!.sy), this.editor.grid)
+            : undefined;
 
         // zones, in their floor shades; solid ones hatched
         zones.forEach((zone, z) => {
@@ -688,12 +763,14 @@ export class PlanView {
             this.ring(ctx, screen(vertices[hover.index]!), 7, COLOUR.hover);
         }
 
-        this.drawStart(ctx, doc);
+        this.drawStart(ctx, doc.map.start, COLOUR.start);
 
-        // where the pointer would place, draw to, or move to
+        // where the pointer would place, draw to, move to, or put the start
         const g = this.gesture;
         if (placing) {
             this.drawSnap(ctx, placing);
+        } else if (putting) {
+            this.drawStart(ctx, { ...putting, angle: doc.map.start.angle }, COLOUR.snap);
         } else if (g.kind === 'draw') {
             if (!g.result) {
                 ctx.strokeStyle = COLOUR.snap;
@@ -720,7 +797,7 @@ export class PlanView {
         this.canvas.style.cursor = g.kind === 'pan' ? 'grabbing'
             : g.kind === 'move' ? 'move'
             : this.selecting ? 'default' : 'crosshair';
-        this.report(this.status(doc, selection, placing));
+        this.report(this.status(doc, selection, placing?.at ?? putting));
         for (const listener of this.drawn) {
             listener();
         }
@@ -810,11 +887,10 @@ export class PlanView {
     }
 
     // The start: a circle, with a tick the way it faces.
-    private drawStart(ctx: CanvasRenderingContext2D, doc: Doc) {
-        const { start } = doc.map;
+    private drawStart(ctx: CanvasRenderingContext2D, start: Start, colour: string) {
         const [sx, sy] = this.view.toScreen(start.x, start.y);
-        const turn = (start.angle / 256) * 2 * Math.PI;
-        ctx.strokeStyle = COLOUR.start;
+        const turn = (start.angle / ANGLE_STEPS) * 2 * Math.PI;
+        ctx.strokeStyle = colour;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(sx, sy, 6, 0, 2 * Math.PI);
@@ -823,7 +899,8 @@ export class PlanView {
         ctx.stroke();
     }
 
-    private status(doc: Doc, selection: Selection, placing: Snap | undefined): string {
+    // The status line; pointed is where a click would place a vertex or put the start.
+    private status(doc: Doc, selection: Selection, pointed: Vertex | undefined): string {
         const { editor } = this;
         const { map } = doc;
         const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -831,7 +908,7 @@ export class PlanView {
             count(v, 'vertex', 'vertices'), count(e, 'edge', 'edges'), count(z, 'zone', 'zones'),
         ].join(', ');
         const parts = [
-            this.selecting ? 'Select' : 'Place',
+            this.selecting ? 'Select' : this.playing ? 'Player' : 'Geometry',
             counts(map.vertices.length, map.edges.length, map.zones.length)
                 + (editor.showCells ? `, ${count(openCells(doc).length, 'cell', 'cells')}` : ''),
         ];
@@ -842,8 +919,8 @@ export class PlanView {
         }
         parts.push(editor.gridOn ? `grid ${editor.gridSize}` : 'grid off');
         const g = this.gesture;
-        const at = placing?.at
-            ?? (g.kind === 'draw' ? g.to.at : g.kind === 'move' ? g.target?.at : undefined);
+        const at = pointed ?? (g.kind === 'draw' ? g.to.at : g.kind === 'move' ? g.target?.at
+            : g.kind === 'player' ? g.start : undefined);
         if (at) {
             parts.push(`x ${at.x} y ${at.y}`);
         } else if (this.pointer) {
@@ -852,6 +929,9 @@ export class PlanView {
         }
         if (g.kind === 'move' && (g.dx || g.dy)) {
             parts.push(`moving ${g.dx}, ${g.dy}`);
+        }
+        if (g.kind === 'player') {
+            parts.push(`facing ${g.start.angle}`);
         }
         if (this.hint) {
             parts.push(this.hint);

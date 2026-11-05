@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import demoText from '../maps/demo.pmap?raw';
-import { convexCells, fan, MAX_RING } from '../src/map/cells';
+import { convexCells, fan, MAX_RING, zoneCells } from '../src/map/cells';
+import { docFromMap, moveVertices, restyleZones, setStart } from '../src/map/edit';
 import { parseMap } from '../src/map/format';
 import { ringArea2, side } from '../src/map/geometry';
 import type { Vertex } from '../src/map/map';
 import type { Region } from '../src/map/regions';
+import { zoneStyle } from '../src/map/zones';
 import { pts } from './helpers';
 
 // Cells that cut the region exactly: each convex, clockwise and within MAX_RING sides; their
@@ -97,5 +99,28 @@ describe('fan', () => {
         const vertices = pts([0, 0], [5, 0], [10, 0], [10, 10], [0, 10]);
         // from vertex 0, the first triangle (0, 1, 2) lies along a side
         expect(fan(vertices, [0, 1, 2, 3, 4])).toEqual([[0, 2, 3], [0, 3, 4]]);
+    });
+});
+
+describe('zoneCells', () => {
+    const parsed = parseMap(demoText);
+    if (!parsed.ok) {
+        throw new Error(parsed.errors.join('\n'));
+    }
+    const doc = docFromMap(parsed.map, parsed.zoneRegions);
+
+    it('keeps the cells through edits that leave the geometry be', () => {
+        const cells = zoneCells(doc);
+        expect(zoneCells(setStart(doc, 100, 100, 0))).toBe(cells);
+        expect(zoneCells(restyleZones(doc, [0], (s) => ({ ...s, solid: true })))).toBe(cells);
+    });
+
+    it('works them out again when the geometry changes', () => {
+        const defaults = {
+            zone: zoneStyle(parsed.map.zones[0]!),
+            edge: { topShade: 0, bottomShade: 0 },
+        };
+        const moved = moveVertices(doc, new Set([0]), 8, 0, defaults).doc;
+        expect(zoneCells(moved)).not.toBe(zoneCells(doc));
     });
 });

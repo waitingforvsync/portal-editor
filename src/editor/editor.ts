@@ -6,7 +6,7 @@ import { shadeFromName } from '../map/shades';
 import { toHeight } from '../map/units';
 import type { Selection } from './selection';
 
-export type Mode = 'place' | 'select';
+export type Mode = 'geometry' | 'select' | 'player';
 
 interface Snapshot {
     doc: Doc;
@@ -17,6 +17,9 @@ const HISTORY = 200;
 
 export const GRID_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
 
+// The start's angle snaps (with the grid on) and steps by this many 256ths of a turn.
+export const ANGLE_SNAP = 8;
+
 export class Editor {
     private present: Snapshot;
     private past: Snapshot[] = [];
@@ -24,7 +27,7 @@ export class Editor {
     private readonly listeners = new Set<() => void>();
     private merging: string | undefined;    // the last commit's merge key, while it may merge
 
-    mode: Mode = 'place';
+    mode: Mode = 'geometry';
     gridOn = true;
     gridSize = 16;
     dither = false;      // the 3D view in the engine's dithers, else their average colours

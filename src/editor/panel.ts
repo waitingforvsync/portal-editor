@@ -1,18 +1,19 @@
 // panel.ts - the properties panel: the selected zones', edges' and vertices' properties, to
-// read and change. A field shows the value the selection shares, or 'mixed'; setting it sets
-// it on all of them, and - and + step each from its own value. Each change is a step to undo,
+// read and change, or in player mode the start's. A field shows the value the selection
+// shares, or 'mixed'; setting it sets it on all of them, and - and + step each from its own
+// value. Each change is a step to undo,
 // and steps of one field in a row make one. A change that can't be made (a floor at or above
 // its ceiling, say) is refused, with the reason in the status line.
 
 import {
-    moveVertices, restyleEdges, restyleZones, type Doc, type EdgeStyle,
+    moveVertices, restyleEdges, restyleZones, setStart, type Doc, type EdgeStyle,
 } from '../map/edit';
 import { edgeZones, facesBetween, type Face } from '../map/faces';
 import { HARDWARE_RGB, NUM_SHADES, shadeName, shadeTile } from '../map/shades';
 import { COORD_MAX, HEIGHT_STEP, isCoord, isHeight, toHeight, type Height } from '../map/units';
 import type { ZoneStyle } from '../map/zones';
-import type { Editor } from './editor';
-import { mapSelection, selectedEdges, selectedZones } from './selection';
+import { ANGLE_SNAP, type Editor } from './editor';
+import { mapSelection, selectedEdges, selectedZones, type Selection } from './selection';
 
 const BIG_STEPS = 8;    // a step with Shift held is this many steps
 
@@ -310,6 +311,7 @@ function describeFaces(faces: readonly Face[]): string {
 export class PropertiesPanel {
     private readonly picker = new ShadePicker();
     private readonly none = element('p', 'none', 'None selected');
+    private readonly player = new Section();
     private readonly zones = new Section();
     private readonly edges = new Section();
     private readonly vertices = new Section();
@@ -324,6 +326,9 @@ export class PropertiesPanel {
     private readonly draws = element('span', 'value');
     private readonly x: NumberField;
     private readonly y: NumberField;
+    private readonly startX: NumberField;
+    private readonly startY: NumberField;
+    private readonly startAngle: NumberField;
 
     constructor(root: HTMLElement, private readonly editor: Editor) {
         const { picker } = this;
@@ -363,15 +368,32 @@ export class PropertiesPanel {
         this.vertices.row('x', this.x.input);
         this.vertices.row('y', this.y.input);
 
-        root.append(this.none, this.zones.root, this.edges.root, this.vertices.root);
+        this.startX = this.startField('x', `x: up the page, whole units in 0..${COORD_MAX}`);
+        this.startY = this.startField('y', `y: to the right, whole units in 0..${COORD_MAX}`);
+        this.startAngle = this.startField('angle', `Angle: 256ths of a turn, 0 up the page and `
+            + `64 to the right, in steps of ${ANGLE_SNAP}`);
+        this.player.row('x', this.startX.input, ...this.startX.buttons);
+        this.player.row('y', this.startY.input, ...this.startY.buttons);
+        this.player.row('Angle', this.startAngle.input, ...this.startAngle.buttons);
+
+        root.append(this.none, this.player.root, this.zones.root, this.edges.root,
+            this.vertices.root);
         editor.onChange(() => this.refresh());
         this.refresh();
     }
 
     private refresh() {
-        const { doc, selection } = this.editor;
+        const { doc } = this.editor;
         const { map } = doc;
-        this.none.hidden = selection.size > 0;
+
+        // player mode: the start, and no selection
+        const playing = this.editor.mode === 'player';
+        const selection: Selection = playing ? new Set() : this.editor.selection;
+        this.none.hidden = playing || selection.size > 0;
+        this.player.show(playing, 'Player start');
+        this.startX.show(map.start.x, true);
+        this.startY.show(map.start.y, true);
+        this.startAngle.show(map.start.angle, true);
 
         // zones: the heights and shades of the open ones; a solid one keeps its own, unseen
         const zones = selectedZones(doc, selection);
@@ -500,6 +522,20 @@ export class PropertiesPanel {
                 (s) => to(s, toHeight(s[which] + delta)), `step ${which}`),
             steps: () => HEIGHT_STEP,
         }, `${title}: whole units, up-positive, in steps of ${HEIGHT_STEP}`, true);
+    }
+
+    // The start's x, y or angle; the angle wraps round.
+    private startField(which: 'x' | 'y' | 'angle', title: string): NumberField {
+        const put = (to: (now: number) => number, merge?: string) => {
+            const { doc } = this.editor;
+            const start = { ...doc.map.start, [which]: to(doc.map.start[which]) };
+            this.apply(() => setStart(doc, start.x, start.y, start.angle), merge);
+        };
+        return new NumberField(this.editor, {
+            set: (value) => put(() => value),
+            step: (delta) => put((now) => now + delta, `step start ${which}`),
+            steps: () => (which === 'angle' ? ANGLE_SNAP : this.editor.grid || 1),
+        }, title, true);
     }
 
     private coordinateField(axis: 'x' | 'y', title: string): NumberField {

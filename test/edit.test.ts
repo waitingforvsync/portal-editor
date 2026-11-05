@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { checkMap } from '../src/map/check';
 import {
     addEdge, addVertex, deleteEdges, deleteVertices, docFromMap, moveVertices, restyleEdges,
-    restyleZones, type Doc, type EditDefaults,
+    restyleZones, setStart, type Doc, type EditDefaults,
 } from '../src/map/edit';
 import { parseMap } from '../src/map/format';
 import { pointInRing } from '../src/map/geometry';
@@ -323,5 +323,27 @@ describe('restyleEdges', () => {
         expect(doc.map.edges.map((e) => [e.a, e.b])).toEqual(ROOM.map.edges.map((e) => [e.a, e.b]));
         expect(ROOM.map.edges[1]!.bottomShade).toBe(0);
         expectValid(doc);
+    });
+});
+
+describe('setStart', () => {
+    it('puts the start, and leaves the rest be', () => {
+        const doc = setStart(ROOM, 30, 40, 64);
+        expect(doc.map.start).toEqual({ x: 30, y: 40, angle: 64 });
+        expect(doc.map.vertices).toBe(ROOM.map.vertices);
+        expect(doc.map.zones).toBe(ROOM.map.zones);
+        expect(doc.regions).toBe(ROOM.regions);
+        expect(ROOM.map.start).not.toEqual(doc.map.start);
+    });
+
+    it('wraps the angle round', () => {
+        expect(setStart(ROOM, 0, 0, -8).map.start.angle).toBe(248);
+        expect(setStart(ROOM, 0, 0, 256 + 3).map.start.angle).toBe(3);
+    });
+
+    it('refuses a point off the map, or a part of a step', () => {
+        expect(() => setStart(ROOM, -1, 0, 0)).toThrow(/would be off the map/);
+        expect(() => setStart(ROOM, 0, 65536, 0)).toThrow(RangeError);
+        expect(() => setStart(ROOM, 0, 0, 1.5)).toThrow(/isn't a whole number/);
     });
 });

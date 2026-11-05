@@ -75,8 +75,9 @@ divider.addEventListener('pointerdown', (e) => {
 // ---- toolbar ----
 
 const buttons = {
-    place: element<HTMLButtonElement>('place'),
+    geometry: element<HTMLButtonElement>('geometry'),
     select: element<HTMLButtonElement>('select'),
+    player: element<HTMLButtonElement>('player'),
     grid: element<HTMLButtonElement>('grid'),
     cells: element<HTMLButtonElement>('cells'),
     dither: element<HTMLButtonElement>('dither'),
@@ -89,13 +90,19 @@ const buttons = {
     export: element<HTMLButtonElement>('export'),
 };
 const fileLabel = element<HTMLElement>('file');
+const help = element<HTMLElement>('help');
+const HELP = help.textContent;
+const PLAYER_HELP = ['click: put the start', 'drag: put it and aim it', 'arrows: nudge it',
+    'wheel: zoom', 'right-drag: pan', '3D: drag to turn'].join('  |  ');
 const picker = element<HTMLInputElement>('picker');
 
 function refresh() {
-    buttons.place.classList.toggle('on', editor.mode === 'place');
+    buttons.geometry.classList.toggle('on', editor.mode === 'geometry');
     buttons.select.classList.toggle('on', editor.mode === 'select');
+    buttons.player.classList.toggle('on', editor.mode === 'player');
     buttons.grid.classList.toggle('on', editor.gridOn);
-    buttons.grid.innerHTML = `Grid ${editor.gridSize}<kbd>G</kbd>`;
+    buttons.grid.textContent = `Grid ${editor.gridSize}`;
+    help.textContent = editor.mode === 'player' ? PLAYER_HELP : HELP;
     buttons.cells.classList.toggle('on', editor.showCells);
     buttons.dither.classList.toggle('on', editor.dither);
     buttons.undo.disabled = !editor.canUndo;
@@ -105,8 +112,9 @@ function refresh() {
 }
 editor.onChange(refresh);
 
-buttons.place.onclick = () => editor.setMode('place');
+buttons.geometry.onclick = () => editor.setMode('geometry');
 buttons.select.onclick = () => editor.setMode('select');
+buttons.player.onclick = () => editor.setMode('player');
 buttons.grid.onclick = () => editor.setGrid(!editor.gridOn);
 buttons.cells.onclick = () => editor.setShowCells(!editor.showCells);
 buttons.dither.onclick = () => editor.setDither(!editor.dither);

@@ -38,10 +38,10 @@ The dev server always uses port 5173, and stops rather than move if it's taken.
 ## Using the editor
 
 The plan view, on the left, shows the map from above, x up the screen and y to the right,
-zones in their floor shades and solid zones hatched. It has two modes. The 3D view is beside
-it, and the divider between them moves.
+zones in their floor shades and solid zones hatched. It has three modes: geometry (G),
+selection (S) and player (P). The 3D view is beside it, and the divider between them moves.
 
-### Placement mode (P)
+### Geometry mode (G)
 
 | Action | Does |
 |--------|------|
@@ -63,12 +63,24 @@ the vertices along it end up selected.
 | Drag something | Moves the selection, selecting what's dragged first if it isn't |
 | Drag from space | Selects what lies inside the box |
 
-Holding Shift selects in either mode, adding to the selection rather than replacing it;
-Shift+click in space still clears it.
+Holding Shift in geometry mode selects as selection mode does, and in either mode adds to
+the selection rather than replacing it; Shift+click in space still clears it.
 
 The selection is a set of vertices. An edge is selected when both its ends are, and a zone
 when every vertex of its outline is (the vertices of its holes don't count), so selecting a
 zone doesn't select what's inside it.
+
+### Player mode (P)
+
+| Action | Does |
+|--------|------|
+| Click | Puts the start there, on the grid, facing as it did |
+| Drag | Puts the start where the drag begins, facing along it: in steps of 8 256ths of a turn with the grid on |
+| Arrows | Nudge the start a grid step |
+
+Player mode has no selection: the selection is kept, unseen, for the other modes, and a click
+in the 3D view selects nothing. The plan shows where a click would put the start, and the
+panel shows the start's x, y and angle.
 
 ### Everywhere
 
@@ -78,7 +90,7 @@ zone doesn't select what's inside it.
 | Arrows | Nudge the selection a grid step |
 | Esc | Cancels a drag under way, else clears the selection |
 | Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y | Undo, redo |
-| G, [ and ] | Grid snapping on or off; grid size down and up |
+| [ and ] | Grid size down and up (the Grid button turns snapping on or off) |
 | C | Shows the soft lines between zones' convex cells (at first), or hides them |
 | D | The 3D view in flat colours (at first), or in the engine's dithers |
 | F | Shows the whole map |
@@ -90,7 +102,8 @@ zone doesn't select what's inside it.
 ### Properties panel
 
 The panel on the right shows what's selected: its zones, its edges and its vertices, each in
-a section of its own, or "None selected".
+a section of its own, or "None selected". In player mode it shows the start instead: its x
+and y, stepping by the grid, and its angle, stepping by 8 and wrapping round.
 
 | Section | Shows |
 |---------|-------|

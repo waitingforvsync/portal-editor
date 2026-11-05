@@ -6,7 +6,7 @@
 import type { Edge, PortalMap, Vertex } from './map';
 import { planarize, type DraftEdge } from './planarize';
 import { findRegions, type Region } from './regions';
-import { toCoord } from './units';
+import { ANGLE_STEPS, COORD_MAX, isCoord, toCoord } from './units';
 import { rebuildZones, zoneStyle, type ZoneStyle } from './zones';
 
 // A map with what's worked out from it: each zone's region, and the construction lines.
@@ -253,6 +253,20 @@ export function restyleZones(
         zones[z] = { ...style, perimeter: zone.perimeter };
     }
     return { ...doc, map: { ...doc.map, zones } };
+}
+
+// Put the start at a point, facing an angle (which wraps round); the geometry stays. Throws if
+// the point is off the map.
+export function setStart(doc: Doc, x: number, y: number, angle: number): Doc {
+    if (!isCoord(x) || !isCoord(y)) {
+        throw new RangeError(`the start (${x}, ${y}) would be off the map: coordinates are `
+            + `whole numbers in 0..${COORD_MAX}`);
+    }
+    if (!Number.isInteger(angle)) {
+        throw new RangeError(`the start's angle ${angle} isn't a whole number`);
+    }
+    const turned = ((angle % ANGLE_STEPS) + ANGLE_STEPS) % ANGLE_STEPS;
+    return { ...doc, map: { ...doc.map, start: { x, y, angle: turned } } };
 }
 
 // Change edges' properties; the geometry stays.

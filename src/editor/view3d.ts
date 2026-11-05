@@ -157,8 +157,8 @@ export class View3D {
 
     private click(sx: number, sy: number, adding: boolean) {
         const { editor, scene } = this;
-        if (!scene || this.sceneDoc !== editor.doc) {
-            return;    // the plan is mid-edit
+        if (!scene || this.sceneDoc !== editor.doc || editor.mode === 'player') {
+            return;    // the plan is mid-edit, or has no selection
         }
         const s = pick(scene, this.camera.ray(sx, sy));
         const surface = s === undefined ? undefined : scene.surfaces[s]!;
@@ -193,15 +193,18 @@ export class View3D {
         canvas.width = Math.round(width * ratio);
         canvas.height = Math.round(height * ratio);
 
+        // a new scene only for new geometry or zones: not, say, for the start moving
         const { doc, selection } = plan.shown();
-        if (doc !== this.sceneDoc) {
+        const was = this.sceneDoc;
+        if (!was || doc.regions !== was.regions || doc.map.vertices !== was.map.vertices
+            || doc.map.edges !== was.map.edges || doc.map.zones !== was.map.zones) {
             this.scene = buildScene(doc);
-            this.sceneDoc = doc;
             this.renderer.setScene(this.scene);
             this.hover = undefined;
             this.plan.hint = '';
             this.flagged = undefined;
         }
+        this.sceneDoc = doc;
         const scene = this.scene!;
 
         camera.width = width;

@@ -93,14 +93,21 @@ export function convexCells(vertices: readonly Vertex[], region: Region): number
     return best ?? [];
 }
 
-// Each zone's cells, worked out once for a document: the plan and the 3D view share them.
-const cache = new WeakMap<Doc, number[][][]>();
+// Each zone's cells, worked out once for its regions and vertices: the plan and the 3D view
+// share them, and an edit that changes neither (of properties, or the start) keeps them.
+interface Known {
+    vertices: readonly Vertex[];
+    cells: number[][][];
+}
+const cache = new WeakMap<readonly Region[], Known>();
 export function zoneCells(doc: Doc): number[][][] {
-    let cells = cache.get(doc);
-    if (!cells) {
-        cells = doc.regions.map((region) => convexCells(doc.map.vertices, region));
-        cache.set(doc, cells);
+    const { regions, map: { vertices } } = doc;
+    const known = cache.get(regions);
+    if (known && known.vertices === vertices) {
+        return known.cells;
     }
+    const cells = regions.map((region) => convexCells(vertices, region));
+    cache.set(regions, { vertices, cells });
     return cells;
 }
 
