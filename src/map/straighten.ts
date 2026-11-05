@@ -1,6 +1,7 @@
-// straighten.ts - a planar map's edges without the vertices that add nothing to its shape:
-// those joining just two edges that run straight on through them. Each run of such edges
-// becomes one edge, from the run's first vertex to its last.
+// straighten.ts - a planar map's edges without the vertices that add nothing to it: those
+// joining just two edges that run straight on through them and may be joined, as edges of
+// one colour may. Each run of such edges becomes one edge, from the run's first vertex to its
+// last.
 
 import { onSegmentInterior } from './geometry';
 import type { Vertex } from './map';
@@ -10,11 +11,12 @@ export interface Straightened<E> {
     edges: E[];
 }
 
-// The vertices and edges with each run made one edge. That edge keeps the fields of the run's
-// longest piece and runs that piece's way; it takes the place of the run's lowest-numbered
-// edge, so the edges keep their order.
+// The vertices and edges with each run made one edge, joins saying which two edges meeting
+// at a vertex may be. That edge keeps the fields of the run's longest piece and runs that
+// piece's way; it takes the place of the run's lowest-numbered edge, so the edges keep their
+// order.
 export function straighten<E extends { a: number; b: number }>(
-    vertices: readonly Vertex[], edges: readonly E[],
+    vertices: readonly Vertex[], edges: readonly E[], joins: (e: E, f: E) => boolean,
 ): Straightened<E> {
     const at = vertices.map((): number[] => []);
     edges.forEach((e, i) => {
@@ -25,7 +27,8 @@ export function straighten<E extends { a: number; b: number }>(
     const kept = vertices.map((p, v) => {
         const [e, f] = at[v]!;
         return at[v]!.length !== 2
-            || !onSegmentInterior(vertices[other(e!, v)]!, vertices[other(f!, v)]!, p);
+            || !onSegmentInterior(vertices[other(e!, v)]!, vertices[other(f!, v)]!, p)
+            || !joins(edges[e!]!, edges[f!]!);
     });
     const index: number[] = [];
     const result: Vertex[] = [];

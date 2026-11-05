@@ -81,11 +81,12 @@ type Line = [v1: number, v2: number, front: number, back?: number];
 
 // Room A (sector 0) with a pillar in it; room B (sector 1) east of it, a step up with a lower
 // ceiling, and a second piece of B well away; a closed door (sector 2) north of A. Doom's x
-// runs east and y north; vertex 16 is one the node builder added, and A's west wall is in
-// two lines, either side of vertex 17.
+// runs east and y north; vertex 16 is one the node builder added. A's west wall is in two
+// lines either side of vertex 17, and B's east wall in two either side of 18, its texture
+// changing there.
 const VERTICES = [[0, 0], [256, 0], [256, 256], [0, 256], [512, 0], [512, 256], [0, 320],
     [256, 320], [64, 64], [64, 96], [96, 96], [96, 64], [1024, 0], [1280, 0], [1280, 256],
-    [1024, 256], [128, 128], [0, 96]];
+    [1024, 256], [128, 128], [0, 96], [512, 128]];
 const SIDES: Side[] = [
     [0, '-', '-', 'GREY'],          // 0: A's walls
     [0, 'RED', 'GREEN'],            // 1: A, facing B
@@ -94,15 +95,17 @@ const SIDES: Side[] = [
     [0, 'GREY'],                    // 4: A, facing the door
     [2, '-', '-'],                  // 5: the door, facing A
     [2, '-', '-', 'GREY'],          // 6: the door's walls
+    [1, '-', '-', 'RED'],           // 7: B's walls, in red
 ];
 // each with its front side on its right going v1 to v2, seen with north up
 const LINES: Line[] = [
     [1, 0, 0], [0, 17, 0], [3, 2, 4, 5], [2, 1, 1, 2],         // A
-    [4, 1, 3], [5, 4, 3], [2, 5, 3],                            // B
+    [4, 1, 3], [5, 18, 3], [2, 5, 3],                           // B
     [3, 6, 6], [6, 7, 6], [7, 2, 6],                            // the door
     [8, 11, 0], [11, 10, 0], [10, 9, 0], [9, 8, 0],             // the pillar
     [13, 12, 3], [12, 15, 3], [15, 14, 3], [14, 13, 3],         // B's other piece
     [17, 3, 0],                                                 // A's west wall, continued
+    [18, 4, 7],                                                 // B's east wall, continued
 ];
 const SECTORS = [[0, 128], [32, 96], [0, 0]];
 const PALETTE = [[0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255], [128, 128, 128]];
@@ -155,7 +158,7 @@ describe('readWad', () => {
         const wad = readWad(TEST_WAD);
         expect(levelNames(wad)).toEqual(['E1M1']);
         const level = readLevel(wad, 'E1M1');
-        expect(level.vertices).toHaveLength(18);
+        expect(level.vertices).toHaveLength(19);
         expect(level.linedefs[3]).toMatchObject({ v1: 2, v2: 1, front: 1, back: 2 });
         expect(level.linedefs[0]!.back).toBe(-1);
         expect(level.sidedefs[1]).toMatchObject({ upper: 'RED', lower: 'GREEN', sector: 0 });
@@ -163,7 +166,7 @@ describe('readWad', () => {
     });
 
     it('gives a level\'s size from its lumps', () => {
-        expect(levelSize(readWad(TEST_WAD), 'E1M1')).toEqual({ linedefs: 19, sectors: 3 });
+        expect(levelSize(readWad(TEST_WAD), 'E1M1')).toEqual({ linedefs: 20, sectors: 3 });
     });
 });
 
@@ -243,16 +246,26 @@ describe('importLevel', () => {
 
     it('makes a good map, of the vertices the lines use', () => {
         expect(checkMap(map).errors).toEqual([]);
-        expect(map.vertices).toHaveLength(16);
+        expect(map.vertices).toHaveLength(17);
         expect(map.vertices).not.toContainEqual(at(128, 128));
         expect(notes).toContain('1 vertices no line uses left out (the node builder\'s splits)');
     });
 
-    it('joins lines that run straight on, leaving out the vertex between', () => {
+    it('joins lines that run straight on in one colour, leaving out the vertex between', () => {
         expect(map.vertices).not.toContainEqual(at(0, 96));
         expect(edgeBetween([0, 0], [0, 256])).toBeDefined();
-        expect(notes).toContain('1 vertices where lines run straight on left out, the lines '
-            + 'joined (a wall\'s texture changing along it, say)');
+        expect(notes).toContain('1 vertices where lines of one colour run straight on left out, '
+            + 'the lines joined');
+    });
+
+    it('keeps the vertex where a straight wall\'s texture changes', () => {
+        expect(map.vertices).toContainEqual(at(512, 128));
+        const grey = edgeBetween([512, 256], [512, 128])!;
+        const red = edgeBetween([512, 128], [512, 0])!;
+        expect(red.topShade).not.toBe(grey.topShade);
+        const [r, g, b] = shadeRgb(red.topShade);
+        expect(g).toBe(0);
+        expect(r).toBeGreaterThan(b);
     });
 
     it('gives each region a zone: a sector in pieces several, a pillar a solid one', () => {
@@ -302,7 +315,7 @@ describe.skipIf(!existsSync(SHAREWARE))('importLevel on E1M1', () => {
         const { doc } = importLevel(wad, 'E1M1');
         const { map } = doc;
         expect(checkMap(map).errors).toEqual([]);
-        expect(map.vertices).toHaveLength(352);
+        expect(map.vertices).toHaveLength(377);
         expect(map.zones).toHaveLength(100);
         expect(map.zones.filter((z) => z.solid)).toHaveLength(13);
         const result = exportMap(doc);

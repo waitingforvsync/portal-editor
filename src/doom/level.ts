@@ -1,6 +1,6 @@
 // level.ts - a Doom level as a map. Its linedefs become edges, between only the vertices they
-// use (not those the node builder added for its splits), lines running straight on joined
-// into one (as where a wall's texture changes along it), and each region they enclose becomes
+// use (not those the node builder added for its splits), lines that run straight on in one
+// colour joined into one, and each region they enclose becomes
 // a zone with its sector's heights. A sector in several pieces gives a zone each; a region
 // with no sector, such as the inside of a pillar, is solid. Each surface's flat or texture
 // sets the colour it wants (colour.ts), and it takes the shade most like that which none of
@@ -213,6 +213,12 @@ export function importLevel(wad: Wad, name: string): Imported {
     });
     const wants = surfaceWants(surfaces);
     const lineOf = new Map(lines.map(({ i }, k) => [i, k]));
+    const lineWants = (source: number): { top: Want; bottom: Want } => {
+        const { top, bottom } = lineSurfaces[lineOf.get(source)!]!;
+        return { top: wants[top]!, bottom: wants[bottom ?? top]! };
+    };
+    const same = (p: Want, q: Want) => p.colour.every((c, k) => c === q.colour[k])
+        && p.rather.length === q.rather.length && p.rather.every((s, k) => s === q.rather[k]);
 
     // ---- vertices: those the lines use, scaled, north up the page ----
 
@@ -245,11 +251,17 @@ export function importLevel(wad: Wad, name: string): Imported {
             + `${placed.length} vertices became ${planar.vertices.length}, `
             + `${draft.length} lines ${planar.edges.length} edges`);
     }
-    const straight = straighten(planar.vertices, planar.edges);
+    // a line's colours are what its faces want: the shades come later, kept apart where the
+    // lines meet, so they'd always differ
+    const straight = straighten(planar.vertices, planar.edges, (e, f) => {
+        const p = lineWants(e.source);
+        const q = lineWants(f.source);
+        return same(p.top, q.top) && same(p.bottom, q.bottom);
+    });
     const joined = planar.vertices.length - straight.vertices.length;
     if (joined) {
-        notes.push(`${joined} vertices where lines run straight on left out, the lines joined `
-            + `(a wall's texture changing along it, say)`);
+        notes.push(`${joined} vertices where lines of one colour run straight on left out, the `
+            + `lines joined`);
     }
 
     // ---- zones: a region each, with the sector its boundary faces into ----
@@ -329,10 +341,6 @@ export function importLevel(wad: Wad, name: string): Imported {
 
     // ---- shades: what each surface wants, unlike its neighbours' ----
 
-    const lineWants = (source: number): { top: Want; bottom: Want } => {
-        const { top, bottom } = lineSurfaces[lineOf.get(source)!]!;
-        return { top: wants[top]!, bottom: wants[bottom ?? top]! };
-    };
     const map = distinctShades(unshaded, found.regions, {
         floors: zoneSectors.map((s) => wants[sectorSurfaces[s]!.floor]!),
         ceilings: zoneSectors.map((s) => wants[sectorSurfaces[s]!.ceiling]!),
