@@ -106,15 +106,18 @@ export function parseMap(text: string): ParseResult {
             }
             case 'e': {
                 const [a, b] = args.slice(0, 2).map(index);
-                const shade = shadeFromName(args[2] ?? '');
-                if (args.length !== 3) {
-                    fail(`'e' takes v0 v1 shade`);
+                const topShade = shadeFromName(args[2] ?? '');
+                const bottomShade = args.length === 4 ? shadeFromName(args[3]!) : topShade;
+                if (args.length !== 3 && args.length !== 4) {
+                    fail(`'e' takes v0 v1 top-shade [bottom-shade]`);
                 } else if (a === undefined || b === undefined) {
                     fail(`edge ends aren't vertex numbers`);
-                } else if (shade === undefined) {
+                } else if (topShade === undefined) {
                     fail(`no shade '${args[2]}'`);
+                } else if (bottomShade === undefined) {
+                    fail(`no shade '${args[3]}'`);
                 } else {
-                    edges.push({ a, b, shade });
+                    edges.push({ a, b, topShade, bottomShade });
                     lineOf.edge.push(line);
                 }
                 break;
@@ -175,9 +178,10 @@ export function writeMap(map: PortalMap): string {
     for (const v of map.vertices) {
         out.push(`v ${v.x} ${v.y}`);
     }
-    out.push('', '# e v0 v1 shade');
+    out.push('', '# e v0 v1 top-shade [bottom-shade]');
     for (const e of map.edges) {
-        out.push(`e ${e.a} ${e.b} ${shadeName(e.shade)}`);
+        const bottom = e.bottomShade === e.topShade ? '' : ` ${shadeName(e.bottomShade)}`;
+        out.push(`e ${e.a} ${e.b} ${shadeName(e.topShade)}${bottom}`);
     }
     out.push('', '# z [solid] floor ceiling floor-shade ceiling-shade perimeter');
     for (const z of map.zones) {

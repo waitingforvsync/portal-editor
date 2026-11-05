@@ -17,7 +17,7 @@ const DEFAULTS: EditDefaults = {
         solid: false, floor: toHeight(8), ceiling: toHeight(200),
         floorShade: shadeFromName('KKKR')!, ceilingShade: shadeFromName('KBBB')!,
     },
-    shade: shadeFromName('BBBB')!,
+    edge: { topShade: shadeFromName('BBBB')!, bottomShade: shadeFromName('KKBB')! },
 };
 
 // A square of the given size at (x, y), as vertices from first and its four edges.
@@ -85,6 +85,18 @@ describe('addVertex', () => {
         expectValid(result.doc);
     });
 
+    it('splits an edge into pieces with both its shades', () => {
+        const style = { topShade: shadeFromName('RRGG')!, bottomShade: shadeFromName('KBBB')! };
+        const doc = restyleEdges(ROOM, [0], () => style);
+        const { map } = addVertex(doc, pt(50, 0), undefined, DEFAULTS).doc;
+        const pieces = map.edges.filter((e) => map.vertices[e.a]!.y === 0
+            && map.vertices[e.b]!.y === 0);
+        expect(pieces).toHaveLength(2);
+        for (const e of pieces) {
+            expect(e).toMatchObject(style);
+        }
+    });
+
     it('splits the edge it is given at a point beside it', () => {
         const result = addVertex(ROOM, pt(51, 1), 0, DEFAULTS);
         expect(result.doc.map.edges).toHaveLength(5);
@@ -103,7 +115,9 @@ describe('addEdge', () => {
         expect(doc.map.zones).toHaveLength(0);
         const result = addEdge(doc, { vertex: 2 }, { vertex: 0 }, DEFAULTS);
         expect(result.doc.map.zones).toEqual([{ ...DEFAULTS.zone, perimeter: [0, 1, 2] }]);
-        expect(result.doc.map.edges.every((e) => e.shade === DEFAULTS.shade)).toBe(true);
+        for (const e of result.doc.map.edges) {
+            expect(e).toMatchObject(DEFAULTS.edge);
+        }
         expectValid(result.doc);
     });
 
@@ -135,7 +149,8 @@ describe('addEdge', () => {
         const { edges } = result.doc.map;
         const along = edges.filter((e) => result.doc.map.vertices[e.a]!.y === 0
             && result.doc.map.vertices[e.b]!.y === 0);
-        expect(along.map((e) => e.shade).sort()).toEqual([0, DEFAULTS.shade]);    // old, new
+        // the old edge and the new
+        expect(along.map((e) => e.topShade).sort()).toEqual([0, DEFAULTS.edge.topShade]);
         expect(result.doc.map.zones[0]).toMatchObject({ floor: 0 });
         expectValid(result.doc);
     });
@@ -260,7 +275,7 @@ describe('moveVertices', () => {
         const atY = (e: { a: number; b: number }, y: number) =>
             map.vertices[e.a]!.y === y && map.vertices[e.b]!.y === y;
         const shared = map.edges.filter((e) => atY(e, 100));
-        expect(shared.map((e) => e.shade)).toEqual([shadeFromName('GGGG')]);
+        expect(shared.map((e) => e.topShade)).toEqual([shadeFromName('GGGG')]);
         expect(floorAt(result.doc, 50, 50)).toBe(0);
         expect(floorAt(result.doc, 50, 150)).toBe(32);
         expectValid(result.doc);
@@ -300,11 +315,13 @@ describe('restyleZones', () => {
 });
 
 describe('restyleEdges', () => {
-    it('gives the edges a shade, and nothing else', () => {
+    it('changes the edges given, and nothing else', () => {
         const shade = shadeFromName('RRGG')!;
-        const doc = restyleEdges(ROOM, [1, 3], shade);
-        expect(doc.map.edges.map((e) => e.shade)).toEqual([0, shade, 0, shade]);
-        expect(ROOM.map.edges[1]!.shade).toBe(0);
+        const doc = restyleEdges(ROOM, [1, 3], (s) => ({ ...s, bottomShade: shade }));
+        expect(doc.map.edges.map((e) => e.bottomShade)).toEqual([0, shade, 0, shade]);
+        expect(doc.map.edges.map((e) => e.topShade)).toEqual([0, 0, 0, 0]);
+        expect(doc.map.edges.map((e) => [e.a, e.b])).toEqual(ROOM.map.edges.map((e) => [e.a, e.b]));
+        expect(ROOM.map.edges[1]!.bottomShade).toBe(0);
         expectValid(doc);
     });
 });

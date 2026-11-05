@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import demoText from '../maps/demo.pmap?raw';
 import { add, Camera, cross, distanceFor, dot, type Vec3 } from '../src/editor/camera';
 import { buildScene, pick, SOLID_SHADE, type Surface } from '../src/editor/scene';
-import { docFromMap, type Doc } from '../src/map/edit';
+import { docFromMap, restyleEdges, type Doc } from '../src/map/edit';
 import { parseMap } from '../src/map/format';
 import { ringArea2 } from '../src/map/geometry';
 
@@ -138,6 +138,16 @@ describe('buildScene', () => {
         expect(pitRisers).toHaveLength(4);
         for (const s of pitRisers) {
             expect(s.triangles.every((p) => p[2] === -24 || p[2] === 0)).toBe(true);
+        }
+    });
+
+    it('shades walls and lintels in their edge\'s top shade, risers in its bottom shade', () => {
+        const shaded = restyleEdges(doc, doc.map.edges.keys(),
+            () => ({ topShade: 5, bottomShade: 9 }));
+        const faces = buildScene(shaded).surfaces.filter((s) => s.kind === 'wall'
+            || s.kind === 'riser' || s.kind === 'lintel');
+        for (const s of faces) {
+            expect(s.shade).toBe(s.kind === 'riser' ? 9 : 5);
         }
     });
 });

@@ -6,7 +6,8 @@ import { planarize, type DraftEdge } from '../src/map/planarize';
 import { pt, pts } from './helpers';
 
 function drafts(...pairs: [number, number][]): DraftEdge[] {
-    return pairs.map(([a, b], i) => ({ a, b, shade: i, source: i, rank: 1, tags: 0 }));
+    return pairs.map(([a, b], i) =>
+        ({ a, b, topShade: i, bottomShade: i, source: i, rank: 1, tags: 0 }));
 }
 
 // The result's edges as [a, b] pairs, in order.
@@ -19,7 +20,8 @@ function expectPlanar(result: ReturnType<typeof planarize>) {
     const map: PortalMap = {
         start: { ...pt(0, 0), angle: 0 },
         vertices: result.vertices,
-        edges: result.edges.map(({ a, b, shade }) => ({ a, b, shade: shade % 35 })),
+        edges: result.edges.map(({ a, b, topShade, bottomShade }) =>
+            ({ a, b, topShade: topShade % 35, bottomShade: bottomShade % 35 })),
         zones: [],
     };
     const errors = checkMap(map).errors.filter((e) => !e.startsWith('no zone'));
@@ -86,13 +88,13 @@ describe('planarize', () => {
 
     it('keeps one edge where two overlap, the higher rank, with both tags', () => {
         const edges: DraftEdge[] = [
-            { a: 0, b: 1, shade: 1, source: 0, rank: 1, tags: 1 },
-            { a: 2, b: 3, shade: 2, source: -1, rank: 2, tags: 2 },
+            { a: 0, b: 1, topShade: 1, bottomShade: 3, source: 0, rank: 1, tags: 1 },
+            { a: 2, b: 3, topShade: 2, bottomShade: 4, source: -1, rank: 2, tags: 2 },
         ];
         const result = planarize(pts([0, 0], [0, 10], [0, 5], [0, 15]), edges);
         expect(result.edges).toHaveLength(3);
         const middle = result.edges.find((e) => e.a + e.b === 3 && e.a * e.b === 2)!;    // 1-2
-        expect(middle).toMatchObject({ shade: 2, source: -1, tags: 3 });
+        expect(middle).toMatchObject({ topShade: 2, bottomShade: 4, source: -1, tags: 3 });
         expectPlanar(result);
     });
 

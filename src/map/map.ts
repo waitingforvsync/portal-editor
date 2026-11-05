@@ -8,12 +8,13 @@ export interface Vertex {
     y: Coord;
 }
 
-// An edge between two vertices (indices), in one shade: a wall, or the riser or lintel
-// faces between two zones.
+// An edge between two vertices (indices): a wall, or the riser and lintel faces between two
+// zones. A wall or lintel takes its top shade, a riser its bottom shade.
 export interface Edge {
     a: number;
     b: number;
-    shade: number;
+    topShade: number;
+    bottomShade: number;
 }
 
 // A zone is known by its perimeter: its outline's vertices, clockwise from any of them.

@@ -35,7 +35,7 @@ table of high bytes.
 | `cell_floor` | C | The floor's shade |
 | `cell_ceil` | C | The ceiling's shade |
 | `edge_angle` | E | The edge's direction within its quadrant, in 1024ths of a turn, rounded down. It serves the edge either way round |
-| `edge_colour` | E | The edge's shade + 1, or 0 for a soft edge |
+| `edge_colour` | E | The edge's top shade + 1, or 0 for a soft edge |
 | `edge_len8` | E | The edge's length in 8-unit steps, rounded down |
 | `side_v` | S | The side's start vertex. It ends at the next side's start |
 | `side_edge` | S | The edge it runs along |
@@ -51,8 +51,9 @@ The file is 10 + 4V + (C + 1) + 4C + 3E + 5S bytes. Cell 0's entries are all 0.
   from cell 1. Solid zones and the outside have none.
 - **Sides.** Each cell's ring, clockwise in plan, through every vertex along it. A vertex where
   the ring runs straight on is kept.
-- **Edges.** One for each map edge a ring runs along, coloured by its shade, and one for each
-  soft edge between two cells of a zone, coloured 0. A portal's edge is made when its first
+- **Edges.** One for each map edge a ring runs along, coloured by its top shade (the engine
+  has one shade an edge, for its walls, risers and lintels alike), and one for each soft edge
+  between two cells of a zone, coloured 0. A portal's edge is made when its first
   side, in side order, names it.
 - **Vertices.** Only those the cells use, in the map's order.
 - **Heights.** z = (top - height) / 8, where top is the highest ceiling or eye (a floor plus
@@ -72,4 +73,4 @@ Each problem is listed:
 - A start that isn't inside an open zone.
 - A map with no open zones.
 
-Shades, sprites and art aren't exported.
+An edge's bottom shade isn't exported, and nor are the shade catalogue, sprites and art.

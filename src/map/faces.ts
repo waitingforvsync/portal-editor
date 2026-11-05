@@ -1,5 +1,5 @@
-// faces.ts - what an edge's shade colours in the engine: a wall where there's an open zone on
-// one side only, else the riser where the floors differ and the lintel where the ceilings do.
+// faces.ts - the faces an edge's shades colour: a wall where there's an open zone on one side
+// only, else the riser where the floors differ and the lintel where the ceilings do.
 // Each face is seen from one side: a wall from its open zone, a riser from the lower floor, a
 // lintel from the higher ceiling.
 

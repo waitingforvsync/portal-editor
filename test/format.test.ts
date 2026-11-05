@@ -75,6 +75,18 @@ describe('parseMap', () => {
         expect(errorsOf(parseMap(text))).toEqual([]);
     });
 
+    it('reads an edge\'s top and bottom shades, one shade being both', () => {
+        const result = parseMap(mapText(...SQUARE.slice(0, 7), 'e 3 0 KBRG BBGG', SQUARE_ZONE));
+        expect(errorsOf(result)).toEqual([]);
+        if (result.ok) {
+            const shade = (name: string) => shadeFromName(name)!;
+            expect(result.map.edges[0]).toEqual(
+                { a: 0, b: 1, topShade: shade('KKKK'), bottomShade: shade('KKKK') });
+            expect(result.map.edges[3]).toEqual(
+                { a: 3, b: 0, topShade: shade('KBRG'), bottomShade: shade('BBGG') });
+        }
+    });
+
     it('reads a solid zone, with the heights and shades it keeps', () => {
         const result = parseMap(mapText(...SQUARE, 'z solid -8 64 KRRR KKKB 0 1 2 3'));
         expect(result.ok && result.map.zones[0]).toEqual({
@@ -126,11 +138,14 @@ describe('parseMap errors: the header and records', () => {
         expectError(mapText('v 0x10 0'), 'line 3', 'vertex');
     });
 
-    it('needs edges to name vertices and a shade', () => {
-        expectError(mapText('e 0 1'), 'line 3', `'e' takes v0 v1 shade`);
+    it('needs edges to name vertices and a shade, perhaps two', () => {
+        const fields = `'e' takes v0 v1 top-shade [bottom-shade]`;
+        expectError(mapText('e 0 1'), 'line 3', fields);
+        expectError(mapText('e 0 1 KKKK KKKK KKKK'), 'line 3', fields);
         expectError(mapText('e 0 -1 KKKK'), 'line 3', 'vertex numbers');
         expectError(mapText('e 0 1 kkkk'), 'line 3', `no shade 'kkkk'`);
         expectError(mapText('e 0 1 KKBK'), 'line 3', `no shade 'KKBK'`);
+        expectError(mapText('e 0 1 KKKK KKBK'), 'line 3', `no shade 'KKBK'`);
     });
 
     it('needs zones to have heights in steps, shades and a perimeter', () => {
@@ -225,18 +240,26 @@ describe('writeMap', () => {
         expect(result.ok && writeMap(result.map)).toContain('\nz 0 64 KRRR KKKB 0 1 2 3\n');
     });
 
+    it('writes a bottom shade only where it differs from the top', () => {
+        const result = parseMap(mapText(...SQUARE.slice(0, 7), 'e 3 0 KBRG BBGG', SQUARE_ZONE));
+        const text = result.ok ? writeMap(result.map) : '';
+        expect(text).toContain('\ne 0 1 KKKK\n');
+        expect(text).toContain('\ne 3 0 KBRG BBGG\n');
+    });
+
     it('writes solid zones and an empty map', () => {
         const solid = parseMap(mapText(...SQUARE, 'z solid 0 64 KRRR KKKB 1 2 3 0'));
         expect(solid.ok && writeMap(solid.map)).toContain('\nz solid 0 64 KRRR KKKB 0 1 2 3\n');
         const empty = parseMap(mapText());
         expect(empty.ok && writeMap(empty.map)).toBe([
-            'portalmap 1', '', 'start 5 5 0', '', '# v x y', '', '# e v0 v1 shade', '',
+            'portalmap 1', '', 'start 5 5 0', '', '# v x y', '',
+            '# e v0 v1 top-shade [bottom-shade]', '',
             '# z [solid] floor ceiling floor-shade ceiling-shade perimeter', '',
         ].join('\n'));
     });
 
     it('writes what it reads back to the same map', () => {
-        const first = parseMap(mapText(...SQUARE, 'v 5 5', 'e 0 4 KBRG',
+        const first = parseMap(mapText(...SQUARE, 'v 5 5', 'e 0 4 KBRG RRRR',
             'z -16 0 GGGG BBBB 3 0 1 2'));
         if (!first.ok) {
             throw new Error(first.errors.join('\n'));

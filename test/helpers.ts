@@ -12,9 +12,9 @@ export function pts(...xy: [number, number][]): (Point & Vertex)[] {
     return xy.map(([x, y]) => pt(x, y));
 }
 
-// Edges joining the given vertex pairs, all in shade 0.
+// Edges joining the given vertex pairs, all in shade 0, top and bottom.
 export function joins(...pairs: [number, number][]): Edge[] {
-    return pairs.map(([a, b]) => ({ a, b, shade: 0 }));
+    return pairs.map(([a, b]) => ({ a, b, topShade: 0, bottomShade: 0 }));
 }
 
 // A map's text: the header and a start, then the given lines.

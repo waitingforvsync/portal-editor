@@ -27,8 +27,8 @@ export class Editor {
     mode: Mode = 'place';
     gridOn = true;
     gridSize = 16;
-    dither = true;       // the 3D view in the engine's dithers, else their average colours
-    showCells = false;   // the plan shows the soft lines between zones' convex cells
+    dither = false;      // the 3D view in the engine's dithers, else their average colours
+    showCells = true;    // the plan shows the soft lines between zones' convex cells
     fileName = 'untitled.pmap';
     modified = false;
     message = '';    // shown in the status line until the next press in the plan
@@ -39,7 +39,7 @@ export class Editor {
             solid: false, floor: toHeight(0), ceiling: toHeight(160),
             floorShade: shadeFromName('KRRR')!, ceilingShade: shadeFromName('KKKB')!,
         },
-        shade: shadeFromName('BBRR')!,
+        edge: { topShade: shadeFromName('BBRR')!, bottomShade: shadeFromName('BBRR')! },
     };
 
     constructor(doc: Doc) {

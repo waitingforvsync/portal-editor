@@ -59,7 +59,7 @@ v 1320 875
 v 1388 539
 v 1022 451
 
-# e v0 v1 shade
+# e v0 v1 top-shade [bottom-shade]
 e 5 6 KKKK
 e 6 7 KBBB
 e 7 8 RRGG

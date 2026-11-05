@@ -3,7 +3,7 @@
 // coincide or have no length removed. A crossing point rounds to whole units, which can put a
 // small kink in the edges it splits.
 
-import type { Vertex } from './map';
+import type { Edge, Vertex } from './map';
 import { onSegmentInterior, segmentsCross, side } from './geometry';
 import { toCoord } from './units';
 
@@ -11,10 +11,7 @@ import { toCoord } from './units';
 // new one); every piece of it keeps that, and runs the same way. rank decides which of two
 // coinciding edges survives, the higher. tags are bits carried to every piece, merged when
 // edges coincide.
-export interface DraftEdge {
-    a: number;
-    b: number;
-    shade: number;
+export interface DraftEdge extends Edge {
     source: number;
     rank: number;
     tags: number;

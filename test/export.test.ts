@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import demoText from '../maps/demo.pmap?raw';
-import { docFromMap, type Doc } from '../src/map/edit';
+import { docFromMap, restyleEdges, type Doc } from '../src/map/edit';
 import {
     angleByte, encode, exportMap, EYE_STEPS, HEADER_SIZE, quadrant, type EngineMap,
 } from '../src/map/export';
@@ -220,6 +220,13 @@ describe('exportMap: the demo', () => {
                 && engine.cells[side.adj]!.zone === engine.cells[cell]!.zone;
             expect(e.colour === 0).toBe(sameZone);
         }
+    });
+
+    it('colours a map edge by its top shade, the engine having one shade an edge', () => {
+        const shaded = restyleEdges(DEMO, DEMO.map.edges.keys(),
+            () => ({ topShade: 5, bottomShade: 9 }));
+        const colours = new Set(exported(shaded).engine.edges.map((e) => e.colour));
+        expect(colours).toEqual(new Set([0, 5 + 1]));
     });
 
     it('starts in the pentagon, facing as the map says', () => {

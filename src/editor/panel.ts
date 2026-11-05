@@ -4,7 +4,9 @@
 // and steps of one field in a row make one. A change that can't be made (a floor at or above
 // its ceiling, say) is refused, with the reason in the status line.
 
-import { moveVertices, restyleEdges, restyleZones, type Doc } from '../map/edit';
+import {
+    moveVertices, restyleEdges, restyleZones, type Doc, type EdgeStyle,
+} from '../map/edit';
 import { edgeZones, facesBetween, type Face } from '../map/faces';
 import { HARDWARE_RGB, NUM_SHADES, shadeName, shadeTile } from '../map/shades';
 import { COORD_MAX, HEIGHT_STEP, isCoord, isHeight, toHeight, type Height } from '../map/units';
@@ -317,7 +319,8 @@ export class PropertiesPanel {
     private readonly ceiling: NumberField;
     private readonly floorShade: ShadeButton;
     private readonly ceilingShade: ShadeButton;
-    private readonly edgeShade: ShadeButton;
+    private readonly topShade: ShadeButton;
+    private readonly bottomShade: ShadeButton;
     private readonly draws = element('span', 'value');
     private readonly x: NumberField;
     private readonly y: NumberField;
@@ -347,10 +350,12 @@ export class PropertiesPanel {
                 this.ceilingShade.button),
         );
 
-        this.edgeShade = new ShadeButton(picker, 'Edge shade: its walls, risers and lintels',
-            (shade) => this.apply(() =>
-                restyleEdges(this.editor.doc, this.selectedEdges(), shade)));
-        this.edges.row('Shade', this.edgeShade.button);
+        this.topShade = new ShadeButton(picker, 'Top shade: its walls and lintels (exported)',
+            (topShade) => this.recolourEdges((s) => ({ ...s, topShade })));
+        this.bottomShade = new ShadeButton(picker, 'Bottom shade: its risers',
+            (bottomShade) => this.recolourEdges((s) => ({ ...s, bottomShade })));
+        this.edges.row('Top', this.topShade.button);
+        this.edges.row('Bottom', this.bottomShade.button);
         this.edges.row('Draws', this.draws);
 
         this.x = this.coordinateField('x', 'x: up the page');
@@ -388,7 +393,8 @@ export class PropertiesPanel {
         const edges = selectedEdges(doc, selection);
         this.edges.show(edges.length > 0,
             edges.length === 1 ? `Edge ${edges[0]}` : plural(edges.length, 'edge', 'edges'));
-        this.edgeShade.show(common(edges.map((e) => map.edges[e]!.shade)));
+        this.topShade.show(common(edges.map((e) => map.edges[e]!.topShade)));
+        this.bottomShade.show(common(edges.map((e) => map.edges[e]!.bottomShade)));
         this.draws.textContent = edges.length ? this.describeEdges(doc, edges) : '';
 
         // vertices: their position, which one alone can be given
@@ -469,6 +475,13 @@ export class PropertiesPanel {
     private restyle(zones: number[], change: (s: ZoneStyle) => ZoneStyle, merge?: string) {
         if (zones.length) {
             this.apply(() => restyleZones(this.editor.doc, zones, change), merge);
+        }
+    }
+
+    private recolourEdges(change: (s: EdgeStyle) => EdgeStyle) {
+        const edges = this.selectedEdges();
+        if (edges.length) {
+            this.apply(() => restyleEdges(this.editor.doc, edges, change));
         }
     }
 

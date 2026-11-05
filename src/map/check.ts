@@ -52,8 +52,10 @@ export function checkMap(map: PortalMap, label: Label = plainLabel): MapCheck {
     // edges: between two vertices that exist, once each
     const edgeBetween = new Map<string, number>();
     edges.forEach((e, i) => {
-        if (!isShade(e.shade)) {
-            errors.push(`${label('edge', i)} has no shade ${e.shade}`);
+        for (const shade of [e.topShade, e.bottomShade]) {
+            if (!isShade(shade)) {
+                errors.push(`${label('edge', i)} has no shade ${shade}`);
+            }
         }
         if (!isVertex(e.a) || !isVertex(e.b)) {
             errors.push(`${label('edge', i)} names a vertex that doesn't exist`);

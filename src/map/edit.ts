@@ -3,7 +3,7 @@
 // (zones.ts); a change of properties leaves the geometry as it is. None changes the document
 // it's given.
 
-import type { PortalMap, Vertex } from './map';
+import type { Edge, PortalMap, Vertex } from './map';
 import { planarize, type DraftEdge } from './planarize';
 import { findRegions, type Region } from './regions';
 import { toCoord } from './units';
@@ -21,9 +21,12 @@ export function docFromMap(map: PortalMap, zoneRegions: Region[]): Doc {
     return { map, regions: zoneRegions, construction };
 }
 
+// An edge's properties: all but where it runs.
+export type EdgeStyle = Omit<Edge, 'a' | 'b'>;
+
 export interface EditDefaults {
     zone: ZoneStyle;    // for a region with no zone to come from
-    shade: number;      // for a new edge
+    edge: EdgeStyle;    // for a new edge
 }
 
 export interface EditResult {
@@ -89,7 +92,8 @@ function finish(
 ): { doc: Doc; vertexMap: number[]; drawn: number[] } {
     const planar = planarize(draft.vertices, draft.edges,
         dirty && new Set(dirty.vertices), dirty && new Set(dirty.edges));
-    const edges = planar.edges.map(({ a, b, shade }) => ({ a, b, shade }));
+    const edges = planar.edges.map(({ a, b, topShade, bottomShade }) =>
+        ({ a, b, topShade, bottomShade }));
     const rebuilt = rebuildZones(planar.vertices, edges, {
         before: doc.map,
         beforeRegions: doc.regions,
@@ -158,7 +162,7 @@ export function addEdge(
     const b = endpointVertex(draft, to, splits);
     const pieces = splitEdges(draft, splits);
     const edge = draft.edges.length;
-    draft.edges.push({ a, b, shade: defaults.shade, source: -1, rank: 0, tags: TAG_DRAWN });
+    draft.edges.push({ a, b, ...defaults.edge, source: -1, rank: 0, tags: TAG_DRAWN });
     const newVertices = [a, b].filter((v) => v >= doc.map.vertices.length);
     const done = finish(doc, draft, defaults, { vertices: newVertices, edges: [...pieces, edge] });
     return {
@@ -251,11 +255,14 @@ export function restyleZones(
     return { ...doc, map: { ...doc.map, zones } };
 }
 
-// Give edges a shade; the geometry stays.
-export function restyleEdges(doc: Doc, which: Iterable<number>, shade: number): Doc {
+// Change edges' properties; the geometry stays.
+export function restyleEdges(
+    doc: Doc, which: Iterable<number>, change: (style: EdgeStyle) => EdgeStyle,
+): Doc {
     const edges = [...doc.map.edges];
     for (const e of which) {
-        edges[e] = { ...edges[e]!, shade };
+        const { a, b, ...style } = edges[e]!;
+        edges[e] = { a, b, ...change(style) };
     }
     return { ...doc, map: { ...doc.map, edges } };
 }

@@ -22,7 +22,7 @@ v 10 0
 v 10 10
 v 0 10
 
-# e v0 v1 shade
+# e v0 v1 top-shade [bottom-shade]
 e 0 1 KKBB
 e 1 2 BBBR
 e 2 3 RRGG
@@ -48,7 +48,7 @@ z 0 160 KRRR KKKB 0 1 2 3
 | `portalmap` | version | The format version: `1`. First, and once. |
 | `start` | x y angle | Where the player starts. Exactly once. |
 | `v` | x y | A vertex. |
-| `e` | v0 v1 shade | An edge between two vertices, in a shade. |
+| `e` | v0 v1 top-shade [bottom-shade] | An edge between two vertices, in its shades; see below. |
 | `z` | [`solid`] floor ceiling floor-shade ceiling-shade perimeter... | A zone; see below. |
 
 ## Units and conventions
@@ -78,9 +78,12 @@ The 35 shades of portalc's catalogue (`palette.c`), darkest first:
 
 ## Edges
 
-An edge has one shade, as an engine edge does. Between a zone and the outside, or a solid
-zone, it is a wall. Between two open zones it shades whichever faces show: the riser where
-one floor is higher, the lintel where one ceiling is lower.
+An edge has a top shade and a bottom shade. Between a zone and the outside, or a solid zone,
+it is a wall, in its top shade. Between two open zones it shades whichever faces show: the
+riser where one floor is higher, in its bottom shade, and the lintel where one ceiling is
+lower, in its top shade. A record with one shade gives the edge it as both.
+
+The engine has one shade an edge, so export takes the top shade (`docs/export.md`).
 
 An edge with the same region on both sides (one left dangling, or one joining a hole's
 outline to its surroundings) is a construction line. It is kept, but takes no part in
@@ -119,6 +122,7 @@ Each problem is reported with its line; loading reports them all, not just the f
 ## Writing
 
 The editor writes one form: the version, a blank line, the start, then the `v`, `e` and
-`z` records in that order, each group under its comment header as in the example. Each
-perimeter starts from its lowest-numbered vertex. Comments in a file the editor loads are
+`z` records in that order, each group under its comment header as in the example. An edge's
+bottom shade is written only where it differs from its top shade. Each perimeter starts from
+its lowest-numbered vertex. Comments in a file the editor loads are
 not kept.

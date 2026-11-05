@@ -19,6 +19,8 @@ import {
 import { View, type WorldPoint } from './view';
 
 const DRAG_START = 4;    // pixels the pointer moves before a press becomes a drag
+const ZONE_ALPHA = 0.5;  // a zone's floor shade over the background
+const PALER = 0.2;       // a zone's soft lines: its floor as shown, this far towards white
 
 const COLOUR = {
     background: '#16181c',
@@ -26,7 +28,6 @@ const COLOUR = {
     gridMajor: 'rgba(255, 255, 255, 0.09)',
     edge: '#9aa1ad',
     construction: '#6b717c',
-    soft: 'rgba(255, 255, 255, 0.3)',
     vertex: '#d0d4dc',
     selected: '#ffb43c',
     selectedFill: 'rgba(255, 180, 60, 0.22)',
@@ -74,6 +75,14 @@ function openCells(doc: Doc): number[][] {
 
 function css(rgb: readonly number[], alpha: number): string {
     return `rgba(${rgb.map(Math.round).join(', ')}, ${alpha})`;
+}
+
+// A zone's soft lines' colour: its floor as it shows over the background, a little paler.
+function softColour(floorShade: number): string {
+    const background = [1, 3, 5].map((k) => parseInt(COLOUR.background.slice(k, k + 2), 16));
+    const shown = shadeRgb(floorShade).map((c, k) =>
+        c * ZONE_ALPHA + background[k]! * (1 - ZONE_ALPHA));
+    return css(shown.map((c) => c + (255 - c) * PALER), 1);
 }
 
 export class PlanView {
@@ -594,9 +603,37 @@ export class PlanView {
         // zones, in their floor shades; solid ones hatched
         zones.forEach((zone, z) => {
             zonePath(z);
-            ctx.fillStyle = zone.solid ? this.solidFill(ctx) : css(shadeRgb(zone.floorShade), 0.5);
+            ctx.fillStyle = zone.solid ? this.solidFill(ctx)
+                : css(shadeRgb(zone.floorShade), ZONE_ALPHA);
             ctx.fill();
         });
+
+        // the soft lines between an open zone's cells, once each, a little paler than its floor
+        if (this.editor.showCells) {
+            const isEdge = new Set(edges.map((e) => Math.min(e.a, e.b) * 4294967296
+                + Math.max(e.a, e.b)));
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1;
+            zones.forEach((zone, z) => {
+                if (zone.solid) {
+                    return;
+                }
+                ctx.strokeStyle = softColour(zone.floorShade);
+                ctx.beginPath();
+                for (const cell of cells[z]!) {
+                    cell.forEach((u, k) => {
+                        const v = cell[(k + 1) % cell.length]!;
+                        if (u < v && !isEdge.has(u * 4294967296 + v)) {
+                            ctx.moveTo(...screen(vertices[u]!));
+                            ctx.lineTo(...screen(vertices[v]!));
+                        }
+                    });
+                }
+                ctx.stroke();
+            });
+            ctx.setLineDash([]);
+        }
+
         for (const z of selectedZones(doc, selection)) {
             zonePath(z);
             ctx.fillStyle = COLOUR.selectedFill;
@@ -606,27 +643,6 @@ export class PlanView {
             zonePath(hover.index);
             ctx.fillStyle = COLOUR.hoverFill;
             ctx.fill();
-        }
-
-        // the soft lines between cells, once each
-        if (this.editor.showCells) {
-            const isEdge = new Set(edges.map((e) => Math.min(e.a, e.b) * 4294967296
-                + Math.max(e.a, e.b)));
-            ctx.setLineDash([3, 3]);
-            ctx.strokeStyle = COLOUR.soft;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            for (const cell of openCells(doc)) {
-                cell.forEach((u, k) => {
-                    const v = cell[(k + 1) % cell.length]!;
-                    if (u < v && !isEdge.has(u * 4294967296 + v)) {
-                        ctx.moveTo(...screen(vertices[u]!));
-                        ctx.lineTo(...screen(vertices[v]!));
-                    }
-                });
-            }
-            ctx.stroke();
-            ctx.setLineDash([]);
         }
 
         // edges

@@ -27,7 +27,7 @@ export interface EngineCell {
 
 export interface EngineEdge {
     angle: number;      // its direction within its quadrant, in 1024ths of a turn
-    colour: number;     // its shade + 1, or 0 for a soft edge between cells of one zone
+    colour: number;     // its top shade + 1, or 0 for a soft edge between cells of one zone
     len8: number;       // its length in 8-unit steps, rounded down
 }
 
@@ -163,7 +163,7 @@ export function buildEngineMap(doc: Doc): { engine: EngineMap } | { errors: stri
             edge = edges.length;
             edges.push({
                 angle: angleByte(dx, dy),
-                colour: soft ? 0 : map.edges[e!]!.shade + 1,
+                colour: soft ? 0 : map.edges[e!]!.topShade + 1,
                 len8: Math.floor(length / 8),
             });
         }

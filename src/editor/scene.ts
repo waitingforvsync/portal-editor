@@ -1,9 +1,9 @@
 // scene.ts - the map in three dimensions, as the 3D view draws it and picks from it: surfaces,
 // each flat and seen from one side, made of triangles and outlined along its edges. An edge
-// makes walls, risers and lintels (faces.ts); an open zone makes a floor and a ceiling, each
-// a fan of triangles across each of its convex cells (cells.ts); a solid zone, beside open
-// ones, a top at their highest ceiling and a bottom at their lowest floor. The outside makes
-// nothing.
+// makes walls and lintels in its top shade and risers in its bottom shade (faces.ts); an open
+// zone makes a floor and a ceiling, each a fan of triangles across each of its convex cells
+// (cells.ts); a solid zone, beside open ones, a top at their highest ceiling and a bottom at
+// their lowest floor. The outside makes nothing.
 
 import type { Doc } from '../map/edit';
 import { edgeZones, placeFaces } from '../map/faces';
@@ -64,8 +64,9 @@ export function buildScene(doc: Doc): Scene {
             const normal = f.seen === 'right' ? across : minus([0, 0, 0], across);
             const corners = [at(e.a, f.bottom), at(e.b, f.bottom), at(e.b, f.top), at(e.a, f.top)];
             const [c0, c1, c2, c3] = corners as [Vec3, Vec3, Vec3, Vec3];
+            const shade = f.face === 'riser' ? e.bottomShade : e.topShade;
             surfaces.push({
-                kind: f.face, owner: i, shade: e.shade, normal,
+                kind: f.face, owner: i, shade, normal,
                 triangles: [...facing(c0, c1, c2, normal), ...facing(c0, c2, c3, normal)],
                 outline: loop(corners),
             });

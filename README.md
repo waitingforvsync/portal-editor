@@ -79,8 +79,8 @@ zone doesn't select what's inside it.
 | Esc | Cancels a drag under way, else clears the selection |
 | Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y | Undo, redo |
 | G, [ and ] | Grid snapping on or off; grid size down and up |
-| C | Shows the soft lines between zones' convex cells, or hides them |
-| D | The 3D view in the engine's dithers, or in flat colours |
+| C | Shows the soft lines between zones' convex cells (at first), or hides them |
+| D | The 3D view in flat colours (at first), or in the engine's dithers |
 | F | Shows the whole map |
 | Wheel | Zooms about the pointer |
 | Right or middle drag | Pans |
@@ -95,7 +95,7 @@ a section of its own, or "None selected".
 | Section | Shows |
 |---------|-------|
 | Zones | Solid; the floor and ceiling heights, each with its shade |
-| Edges | The shade, and what the edges draw: walls, risers or lintels |
+| Edges | The top shade (walls and lintels) and bottom shade (risers), and what the edges draw |
 | Vertices | x and y |
 
 A field shows the value everything selected shares, or "mixed". Setting it sets it on all of
@@ -136,12 +136,13 @@ the 3D view's own.
 | Right or middle drag | Pans both views |
 
 Every surface shows from one side only, so from outside the map you see into it. An edge
-draws, in its shade, a wall between an open zone and the outside or a solid zone; a riser
-where two floors differ, seen from the lower; and a lintel where two ceilings differ, seen
-from the higher. Floors face up and ceilings down. A solid zone gets a hatched top at the
-highest ceiling beside it and a bottom at the lowest floor, so a pillar reads as solid; the
-outside gets nothing. Shades show as the engine dithers them, each 4x2 tile laid on the
-screen's pixels at the Beeb's 2:1 pixel shape, or as flat colours (D).
+draws a wall between an open zone and the outside or a solid zone, in its top shade; a riser
+where two floors differ, seen from the lower, in its bottom shade; and a lintel where two
+ceilings differ, seen from the higher, in its top shade. Floors face up and ceilings down. A
+solid zone gets a hatched top at the highest ceiling beside it and a bottom at the lowest
+floor, so a pillar reads as solid; the outside gets nothing. Shades show as flat colours, or
+as the engine dithers them (D), each 4x2 tile laid on the screen's pixels at the Beeb's 2:1
+pixel shape.
 
 Selected surfaces are tinted amber, with posts up the selected vertices; the surface under
 the pointer is lit, and named in the status line. The start shows as a post up to eye height
@@ -154,14 +155,16 @@ The engine holds the map as convex cells of at most 8 sides each. Every zone is 
 them after each edit: its region is cut into triangles, which are merged back across the
 diagonals between them while the result stays convex and within 8 sides, trying several ways
 and keeping the fewest cells. The diagonals left are the soft edges. Both views draw zones
-from their cells; C shows the soft lines in the plan, and the cell count in the status line.
+from their cells. The plan shows the soft lines, dashed and a little paler than the zone's
+floor, and the cell count in the status line; C hides them.
 The demo map's open zones make 26 cells (portalc's hand-built scene has 27).
 
 ### Export
 
 Export (Ctrl+E) saves the map as the engine loads it, as the map's name with `.bin`: its
 open zones' convex cells, their sides and edges, the vertices they use, and the start, as
-`docs/export.md` lays out. The status line gives the counts and the size. A map that can't
+`docs/export.md` lays out. The engine has one shade an edge, so an edge's top shade is the
+one exported. The status line gives the counts and the size. A map that can't
 be exported (more than 256 of anything, an edge 2048 units long or more, heights spanning
 more than 255 steps of 8, or a start outside every open zone) is refused, with each reason
 listed.
