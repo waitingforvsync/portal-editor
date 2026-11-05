@@ -8,8 +8,8 @@ So far: the map text format (reading, checking and writing); a plan view for pla
 vertices, drawing edges, and selecting, moving, deleting, cutting, copying and pasting them,
 and for putting the player's start, with the zones and their convex cells worked out as you
 go; a 3D view of the map as the engine draws it; a properties panel for the selected zones,
-edges and vertices; and an export of the map as the engine loads it. It opens on the demo
-map.
+edges and vertices; an export of the map as the engine loads it; and an import of Doom
+levels. It opens on the demo map.
 
 It runs at <https://waitingforvsync.github.io/portal-editor/>.
 
@@ -207,6 +207,32 @@ be exported (more than 256 of anything, an edge 2048 units long or more, heights
 more than 255 steps of 8, or a start outside every open zone) is refused, with each reason
 listed.
 
+### Importing Doom levels
+
+Opening a Doom WAD (`.wad`) imports its first level (E1M1 in Doom's), named after it, such as
+`e1m1.pmap`. The console lists what the import changed or left out. WADs are id Software's:
+git ignores them, so they stay out of this repository.
+
+- **Geometry.** Each linedef becomes an edge, between only the vertices linedefs use: the
+  node builder's split vertices are left out, as are linedefs with one sector on both sides,
+  which bound nothing. Lines that cross are split where they cross.
+- **Zones.** Each region the edges enclose becomes a zone, with the sector its boundary's
+  sidedefs face into. A sector in several pieces gives a zone each; a region with no sector,
+  such as the inside of a pillar, is solid.
+- **Size and heights.** Everything is scaled by 2, bringing Doom's eye height (41) near the
+  engine's (80), and laid out as Doom's automap shows it, north up the page. A closed sector
+  (a door) is opened to 4 below its neighbours' lowest ceiling, as a door opens; one with no
+  room to open is solid.
+- **Shades.** Each flat and wall texture's average colour, in linear light and doubled
+  (Doom's textures are dark and the shades bright), takes the nearest shade in CIELAB. A
+  wall takes its middle texture; a lintel the upper texture on the side it's seen from (the
+  sky's, between two skies), a riser the lower texture on its side. A sky ceiling takes the
+  sky texture's shade.
+- **The start** is player 1's, facing the same way.
+
+Things other than the start, lighting, specials and tags aren't imported. Most of Doom's
+levels are too big to export as they are: more than 256 vertices, edges or sides.
+
 ### Snapping and edits
 
 A new vertex, the end of a drawn edge, or a moved selection's grabbed vertex snaps to the
@@ -235,7 +261,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/main.ts` | The page: toolbar, the two views, panel, status line; opening, saving, exporting |
 | `src/map/units.ts` | Coordinate and height types, and their checks |
 | `src/map/map.ts` | The map: vertices, edges, zones, start |
-| `src/map/shades.ts` | The engine's 35-shade catalogue |
+| `src/map/shades.ts` | The engine's 35-shade catalogue, and the nearest to a colour |
 | `src/map/geometry.ts` | Exact predicates on whole-unit points |
 | `src/map/regions.ts` | The regions the edges enclose, with their holes |
 | `src/map/check.ts` | What makes a map well formed |
@@ -257,6 +283,8 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/editor/scene.ts` | The map's surfaces in 3D, and picking them |
 | `src/editor/renderer.ts` | Drawing the surfaces with WebGL2 |
 | `src/editor/view3d.ts` | The 3D view: drawing, and pointer handling |
+| `src/doom/wad.ts` | Reading Doom's WADs: levels, the palette, flats' and textures' colours |
+| `src/doom/level.ts` | A Doom level as a map |
 | `test/` | Tests, one file per module |
 
 In the browser's console, `portal.editor`, `portal.plan`, `portal.view3d` and `portal.panel`

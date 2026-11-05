@@ -1,11 +1,14 @@
 // main.ts - the page: the toolbar, the plan and 3D views, the properties panel and the status
-// line; and opening, saving and exporting maps. It starts with the demo map.
+// line; and opening, saving and exporting maps. It starts with the demo map. Opening a Doom
+// WAD imports its first level.
 
 import demoText from '../maps/demo.pmap?raw';
 import { Editor } from './editor/editor';
 import { PropertiesPanel } from './editor/panel';
 import { PlanView } from './editor/plan';
 import { View3D } from './editor/view3d';
+import { importLevel } from './doom/level';
+import { levelNames, readWad } from './doom/wad';
 import { docFromMap, type Doc } from './map/edit';
 import { exportMap } from './map/export';
 import { parseMap, writeMap } from './map/format';
@@ -146,9 +149,36 @@ function open() {
     }
 }
 
+// A Doom WAD's first level, as a map named after it.
+async function importWad(file: File) {
+    try {
+        const wad = readWad(new Uint8Array(await file.arrayBuffer()));
+        const [level] = levelNames(wad);
+        if (!level) {
+            throw new Error(`it has no levels`);
+        }
+        const { doc, notes } = importLevel(wad, level);
+        editor.load(doc, `${level.toLowerCase()}.pmap`);
+        plan.fit();
+        for (const note of notes) {
+            console.info(`${level}: ${note}`);
+        }
+        const { map } = doc;
+        editor.tell(`imported ${level} from ${file.name}: ${map.vertices.length} vertices, `
+            + `${map.edges.length} edges, ${map.zones.length} zones (the console has the notes)`);
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        window.alert(`${file.name} doesn't import: ${reason}`);
+    }
+}
+
 picker.onchange = async () => {
     const file = picker.files?.[0];
     if (!file) {
+        return;
+    }
+    if (/\.wad$/i.test(file.name)) {
+        await importWad(file);
         return;
     }
     const doc = docFromText(await file.text());

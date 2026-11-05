@@ -1,0 +1,237 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+import { importLevel, SCALE } from '../src/doom/level';
+import { levelNames, readLevel, readWad } from '../src/doom/wad';
+import { checkMap } from '../src/map/check';
+import { zoneAt } from '../src/editor/hit';
+import { exportMap } from '../src/map/export';
+import { nearestShade, shadeFromName } from '../src/map/shades';
+
+// ---- a WAD made here: lumps written as Doom lays them out ----
+
+function ascii(text: string, length = text.length): Uint8Array {
+    return Uint8Array.from({ length }, (_, i) => text.charCodeAt(i) || 0);
+}
+
+function lump(size: number, write: (view: DataView, bytes: Uint8Array) => void): Uint8Array {
+    const bytes = new Uint8Array(size);
+    write(new DataView(bytes.buffer), bytes);
+    return bytes;
+}
+
+function records<T>(items: readonly T[], size: number,
+    write: (view: DataView, bytes: Uint8Array, at: number, item: T) => void): Uint8Array {
+    return lump(items.length * size, (view, bytes) =>
+        items.forEach((item, i) => write(view, bytes, i * size, item)));
+}
+
+function makeWad(lumps: readonly [string, Uint8Array][]): Uint8Array {
+    const size = lumps.reduce((sum, [, data]) => sum + data.length, 12);
+    return lump(size + lumps.length * 16, (view, bytes) => {
+        bytes.set(ascii('IWAD'));
+        view.setInt32(4, lumps.length, true);
+        view.setInt32(8, size, true);
+        let at = 12;
+        lumps.forEach(([name, data], i) => {
+            bytes.set(data, at);
+            const entry = size + i * 16;
+            view.setInt32(entry, at, true);
+            view.setInt32(entry + 4, data.length, true);
+            bytes.set(ascii(name, 8), entry + 8);
+            at += data.length;
+        });
+    });
+}
+
+// An 8x8 patch of one palette index.
+function patch(index: number): Uint8Array {
+    return lump(8 + 8 * 4 + 8 * 13, (view, bytes) => {
+        view.setInt16(0, 8, true);
+        view.setInt16(2, 8, true);
+        for (let col = 0; col < 8; col++) {
+            const at = 40 + col * 13;
+            view.setInt32(8 + col * 4, at, true);
+            bytes.set([0, 8, 0, ...Array<number>(8).fill(index), 0, 0xff], at);
+        }
+    });
+}
+
+// Wall textures, each one 8x8 patch of the same name with a P in front.
+function textures(names: readonly string[]): Uint8Array {
+    const header = 4 + names.length * 4;
+    return lump(header + names.length * 32, (view, bytes) => {
+        view.setInt32(0, names.length, true);
+        names.forEach((name, i) => {
+            const at = header + i * 32;
+            view.setInt32(4 + i * 4, at, true);
+            bytes.set(ascii(name, 8), at);
+            view.setInt16(at + 12, 8, true);
+            view.setInt16(at + 14, 8, true);
+            view.setInt16(at + 20, 1, true);
+            view.setInt16(at + 26, i, true);    // its patch, as PNAMES numbers them
+        });
+    });
+}
+
+type Side = [sector: number, upper?: string, lower?: string, middle?: string];
+type Line = [v1: number, v2: number, front: number, back?: number];
+
+// Room A (sector 0) with a pillar in it; room B (sector 1) east of it, a step up with a lower
+// ceiling, and a second piece of B well away; a closed door (sector 2) north of A. Doom's x
+// runs east and y north; vertex 16 is one the node builder added.
+const VERTICES = [[0, 0], [256, 0], [256, 256], [0, 256], [512, 0], [512, 256], [0, 320],
+    [256, 320], [64, 64], [64, 96], [96, 96], [96, 64], [1024, 0], [1280, 0], [1280, 256],
+    [1024, 256], [128, 128]];
+const SIDES: Side[] = [
+    [0, '-', '-', 'GREY'],          // 0: A's walls
+    [0, 'RED', 'GREEN'],            // 1: A, facing B
+    [1, 'BLUE', 'BLUE'],            // 2: B, facing A
+    [1, '-', '-', 'GREY'],          // 3: B's walls
+    [0, 'GREY'],                    // 4: A, facing the door
+    [2, '-', '-'],                  // 5: the door, facing A
+    [2, '-', '-', 'GREY'],          // 6: the door's walls
+];
+// each with its front side on its right going v1 to v2, seen with north up
+const LINES: Line[] = [
+    [1, 0, 0], [0, 3, 0], [3, 2, 4, 5], [2, 1, 1, 2],          // A
+    [4, 1, 3], [5, 4, 3], [2, 5, 3],                            // B
+    [3, 6, 6], [6, 7, 6], [7, 2, 6],                            // the door
+    [8, 11, 0], [11, 10, 0], [10, 9, 0], [9, 8, 0],             // the pillar
+    [13, 12, 3], [12, 15, 3], [15, 14, 3], [14, 13, 3],         // B's other piece
+];
+const SECTORS = [[0, 128], [32, 96], [0, 0]];
+const PALETTE = [[0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255], [128, 128, 128]];
+
+const TEST_WAD = makeWad([
+    ['PLAYPAL', lump(768, (_, bytes) => PALETTE.forEach((c, i) => bytes.set(c, i * 3)))],
+    ['E1M1', new Uint8Array()],
+    ['THINGS', records([[128, 32, 90, 1, 7]], 10, (view, _, at, t) =>
+        t.forEach((n, k) => view.setInt16(at + k * 2, n, true)))],
+    ['LINEDEFS', records(LINES, 14, (view, _, at, [v1, v2, front, back]) => {
+        view.setUint16(at, v1, true);
+        view.setUint16(at + 2, v2, true);
+        view.setUint16(at + 10, front, true);
+        view.setUint16(at + 12, back ?? 0xffff, true);
+    })],
+    ['SIDEDEFS', records(SIDES, 30, (view, bytes, at, [sector, upper, lower, middle]) => {
+        bytes.set(ascii(upper ?? '-', 8), at + 4);
+        bytes.set(ascii(lower ?? '-', 8), at + 12);
+        bytes.set(ascii(middle ?? '-', 8), at + 20);
+        view.setUint16(at + 28, sector, true);
+    })],
+    ['VERTEXES', records(VERTICES, 4, (view, _, at, [x, y]) => {
+        view.setInt16(at, x!, true);
+        view.setInt16(at + 2, y!, true);
+    })],
+    ['SECTORS', records(SECTORS, 26, (view, bytes, at, [floor, ceiling]) => {
+        view.setInt16(at, floor!, true);
+        view.setInt16(at + 2, ceiling!, true);
+        bytes.set(ascii('FLOORG', 8), at + 4);
+        bytes.set(ascii('FLOORR', 8), at + 12);
+    })],
+    ['TEXTURE1', textures(['RED', 'GREEN', 'BLUE', 'GREY'])],
+    ['PNAMES', lump(4 + 4 * 8, (view, bytes) => {
+        view.setInt32(0, 4, true);
+        ['PRED', 'PGREEN', 'PBLUE', 'PGREY'].forEach((n, i) => bytes.set(ascii(n, 8), 4 + i * 8));
+    })],
+    ['PRED', patch(1)], ['PGREEN', patch(2)], ['PBLUE', patch(3)], ['PGREY', patch(4)],
+    ['F_START', new Uint8Array()],
+    ['FLOORG', new Uint8Array(4096).fill(2)],
+    ['FLOORR', new Uint8Array(4096).fill(1)],
+    ['F_END', new Uint8Array()],
+]);
+
+describe('readWad', () => {
+    it('refuses what isn\'t a WAD', () => {
+        expect(() => readWad(ascii('PK\x03\x04 not a wad'))).toThrow(/not a WAD/);
+    });
+
+    it('finds the levels and reads their lumps', () => {
+        const wad = readWad(TEST_WAD);
+        expect(levelNames(wad)).toEqual(['E1M1']);
+        const level = readLevel(wad, 'E1M1');
+        expect(level.vertices).toHaveLength(17);
+        expect(level.linedefs[3]).toMatchObject({ v1: 2, v2: 1, front: 1, back: 2 });
+        expect(level.linedefs[0]!.back).toBe(-1);
+        expect(level.sidedefs[1]).toMatchObject({ upper: 'RED', lower: 'GREEN', sector: 0 });
+        expect(level.things[0]).toMatchObject({ x: 128, y: 32, angle: 90, type: 1 });
+    });
+});
+
+describe('nearestShade', () => {
+    it('matches the hardware colours and their even mix', () => {
+        const names = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0.25, 0.25, 0.25]]
+            .map((c) => nearestShade(c as [number, number, number]));
+        expect(names).toEqual(['KKKK', 'RRRR', 'GGGG', 'BBBB', 'KBRG'].map(shadeFromName));
+    });
+});
+
+describe('importLevel', () => {
+    const { doc, notes } = importLevel(readWad(TEST_WAD), 'E1M1');
+    const { map } = doc;
+    // where a Doom point lands: north up the page and east to the right, scaled, the level's
+    // south-west corner (0, 0) moved 256 in from the edge
+    const at = (x: number, y: number) => ({ x: y * SCALE + 256, y: x * SCALE + 256 });
+    const zoneOver = (x: number, y: number) => {
+        const z = zoneAt(doc, at(x, y));
+        return z === undefined ? undefined : map.zones[z];
+    };
+
+    it('makes a good map, of the vertices the lines use', () => {
+        expect(checkMap(map).errors).toEqual([]);
+        expect(map.vertices).toHaveLength(16);
+        expect(map.vertices).not.toContainEqual(at(128, 128));
+        expect(notes).toContain('1 vertices no line uses left out (the node builder\'s splits)');
+    });
+
+    it('gives each region a zone: a sector in pieces several, a pillar a solid one', () => {
+        expect(map.zones).toHaveLength(5);
+        expect(zoneOver(80, 80)!.solid).toBe(true);
+        expect(zoneOver(400, 128))
+            .toMatchObject({ solid: false, floor: 32 * SCALE, ceiling: 96 * SCALE });
+        expect(zoneOver(1100, 128)).toMatchObject({ solid: false, floor: 32 * SCALE });
+        expect(zoneOver(128, 200)).toMatchObject({ solid: false, floor: 0, ceiling: 128 * SCALE });
+        expect(notes).toContain('1 sectors in several pieces: a zone each');
+    });
+
+    it('opens a closed door to below its neighbours\' lowest ceiling', () => {
+        expect(zoneOver(128, 288)).toMatchObject({ solid: false, floor: 0, ceiling: 124 * SCALE });
+    });
+
+    it('shades a lintel from the higher ceiling\'s side, a riser from the lower floor\'s', () => {
+        const a = map.vertices.findIndex((v) => v.x === at(256, 256).x && v.y === at(256, 256).y);
+        const b = map.vertices.findIndex((v) => v.x === at(256, 0).x && v.y === at(256, 0).y);
+        const shared = map.edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+        expect(shared).toMatchObject({
+            topShade: shadeFromName('RRRR'), bottomShade: shadeFromName('GGGG'),
+        });
+    });
+
+    it('shades floors and ceilings by their flats', () => {
+        expect(zoneOver(128, 200)).toMatchObject({
+            floorShade: shadeFromName('GGGG'), ceilingShade: shadeFromName('RRRR'),
+        });
+    });
+
+    it('starts where player 1 does, facing the same way', () => {
+        expect(map.start).toEqual({ ...at(128, 32), angle: 0 });    // north: up the page
+    });
+});
+
+// E1M1 of the shareware WAD, when it's there: WADs aren't in the repository.
+const SHAREWARE = new URL('../docs/doom1.wad', import.meta.url);
+describe.skipIf(!existsSync(SHAREWARE))('importLevel on E1M1', () => {
+    it('makes a good map, and refuses only the export\'s counts', () => {
+        const wad = readWad(readFileSync(SHAREWARE));
+        const { doc } = importLevel(wad, 'E1M1');
+        const { map } = doc;
+        expect(checkMap(map).errors).toEqual([]);
+        expect(map.vertices).toHaveLength(381);
+        expect(map.zones).toHaveLength(100);
+        expect(map.zones.filter((z) => z.solid)).toHaveLength(13);
+        const result = exportMap(doc);
+        expect(!result.ok && result.errors.every((e) => e.includes('a byte knows at most')))
+            .toBe(true);
+    });
+});

@@ -94,3 +94,34 @@ export function shadeRgb(shade: number): [number, number, number] {
     }
     return rgb;
 }
+
+// ---- matching colours ----
+
+// CIELAB (D65) from linear sRGB, each channel 0 to 1.
+function lab([r, g, b]: readonly number[]): [number, number, number] {
+    const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+    const x = f((0.4124 * r! + 0.3576 * g! + 0.1805 * b!) / 0.95047);
+    const y = f(0.2126 * r! + 0.7152 * g! + 0.0722 * b!);
+    const z = f((0.0193 * r! + 0.1192 * g! + 0.9505 * b!) / 1.08883);
+    return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+
+// Each shade as its dither looks from afar: its pixels' light mixed. The hardware colours are
+// full on or off, so that's the average of their channels.
+const SHADE_LAB = TABLE.map((_, i) => lab(shadeRgb(i).map((c) => c / 255)));
+
+// The shade that looks most like a colour given in linear light (each channel 0 to 1): the
+// nearest in CIELAB.
+export function nearestShade(linear: readonly [number, number, number]): number {
+    const [l, a, b] = lab(linear);
+    let best = 0;
+    let bestDistance = Infinity;
+    SHADE_LAB.forEach(([sl, sa, sb], i) => {
+        const d = (sl - l) ** 2 + (sa - a) ** 2 + (sb - b) ** 2;
+        if (d < bestDistance) {
+            best = i;
+            bestDistance = d;
+        }
+    });
+    return best;
+}
