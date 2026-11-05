@@ -10,6 +10,8 @@ convex cells worked out as you go; a 3D view of the map as the engine draws it; 
 properties panel for the selected zones, edges and vertices; and an export of the map as the
 engine loads it. It opens on the demo map.
 
+It runs at <https://waitingforvsync.github.io/portal-editor/>.
+
 ## Running
 
 Needs Node 22.12 or later.
@@ -34,6 +36,13 @@ npm run build    # type-check, then build into dist/
 | Install, build, serve | Terminal > Run Task: `install`, `build`, `dev` |
 
 The dev server always uses port 5173, and stops rather than move if it's taken.
+
+### Publishing
+
+Each push to `main` runs `.github/workflows/pages.yml`, which tests and builds the editor and
+publishes `dist/` with GitHub Pages at <https://waitingforvsync.github.io/portal-editor/>. It
+can also be run by hand from the repository's Actions tab. The build refers to its assets by
+relative paths (`base` in `vite.config.ts`), so it works under the repository's path.
 
 ## Using the editor
 
@@ -203,6 +212,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 
 | Path | What |
 |------|------|
+| `.github/workflows/pages.yml` | Testing, building and publishing with GitHub Pages |
 | `docs/format.md` | The map text format |
 | `docs/export.md` | The export the engine loads |
 | `maps/demo.pmap` | portalc's demo scene |
