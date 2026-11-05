@@ -1,5 +1,6 @@
 // level.ts - a Doom level as a map. Its linedefs become edges, between only the vertices they
-// use (not those the node builder added for its splits), and each region they enclose becomes
+// use (not those the node builder added for its splits), lines running straight on joined
+// into one (as where a wall's texture changes along it), and each region they enclose becomes
 // a zone with its sector's heights. A sector in several pieces gives a zone each; a region
 // with no sector, such as the inside of a pillar, is solid. Each surface's flat or texture
 // sets the colour it wants (colour.ts), and it takes the shade most like that which none of
@@ -14,6 +15,7 @@ import { checkMap } from '../map/check';
 import type { Edge, PortalMap, Zone } from '../map/map';
 import { planarize, type DraftEdge } from '../map/planarize';
 import { findRegions } from '../map/regions';
+import { straighten } from '../map/straighten';
 import { ANGLE_STEPS, COORD_MAX, HEIGHT_STEP, toCoord, toHeight } from '../map/units';
 import type { ZoneStyle } from '../map/zones';
 import { surfaceWants, type Direction, type Surface } from './colour';
@@ -243,13 +245,19 @@ export function importLevel(wad: Wad, name: string): Imported {
             + `${placed.length} vertices became ${planar.vertices.length}, `
             + `${draft.length} lines ${planar.edges.length} edges`);
     }
+    const straight = straighten(planar.vertices, planar.edges);
+    const joined = planar.vertices.length - straight.vertices.length;
+    if (joined) {
+        notes.push(`${joined} vertices where lines run straight on left out, the lines joined `
+            + `(a wall's texture changing along it, say)`);
+    }
 
     // ---- zones: a region each, with the sector its boundary faces into ----
 
-    const edges: Edge[] = planar.edges.map(({ a, b, topShade, bottomShade }) =>
+    const edges: Edge[] = straight.edges.map(({ a, b, topShade, bottomShade }) =>
         ({ a, b, topShade, bottomShade }));
-    const found = findRegions(planar.vertices, edges);
-    const edgeAt = new Map(planar.edges.map((e, k) => [pairKey(e.a, e.b), k]));
+    const found = findRegions(straight.vertices, edges);
+    const edgeAt = new Map(straight.edges.map((e, k) => [pairKey(e.a, e.b), k]));
     const pieces = sectors.map(() => 0);
     let voids = 0;
     const zoneSectors: number[] = [];    // each zone's sector, or for a solid one its neighbour's
@@ -260,7 +268,7 @@ export function importLevel(wad: Wad, name: string): Imported {
         for (const cycle of [region.perimeter, ...region.holes]) {
             cycle.forEach((u, k) => {
                 const v = cycle[(k + 1) % cycle.length]!;
-                const e = planar.edges[edgeAt.get(pairKey(u, v))!]!;
+                const e = straight.edges[edgeAt.get(pairKey(u, v))!]!;
                 const l = linedefs[e.source]!;
                 const [mine, theirs] = e.a === u ? [l.front, l.back] : [l.back, l.front];
                 const s = sectorOf(mine);
@@ -314,7 +322,7 @@ export function importLevel(wad: Wad, name: string): Imported {
             y: toCoord(Math.min(COORD_MAX, Math.max(0, at.y))),
             angle: ((turn % ANGLE_STEPS) + ANGLE_STEPS) % ANGLE_STEPS,
         },
-        vertices: planar.vertices,
+        vertices: straight.vertices,
         edges,
         zones,
     };
@@ -328,8 +336,8 @@ export function importLevel(wad: Wad, name: string): Imported {
     const map = distinctShades(unshaded, found.regions, {
         floors: zoneSectors.map((s) => wants[sectorSurfaces[s]!.floor]!),
         ceilings: zoneSectors.map((s) => wants[sectorSurfaces[s]!.ceiling]!),
-        tops: planar.edges.map((e) => lineWants(e.source).top),
-        bottoms: planar.edges.map((e) => lineWants(e.source).bottom),
+        tops: straight.edges.map((e) => lineWants(e.source).top),
+        bottoms: straight.edges.map((e) => lineWants(e.source).bottom),
     });
     const check = checkMap(map);
     if (check.errors.length) {

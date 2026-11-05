@@ -221,7 +221,9 @@ git ignores them, so they stay out of this repository.
 
 - **Geometry.** Each linedef becomes an edge, between only the vertices linedefs use: the
   node builder's split vertices are left out, as are linedefs with one sector on both sides,
-  which bound nothing. Lines that cross are split where they cross.
+  which bound nothing. Lines that cross are split where they cross. Lines that run
+  straight on through a vertex no other line meets, as where a wall's texture changes along
+  it, are joined into one edge, which takes the longest line's textures.
 - **Zones.** Each region the edges enclose becomes a zone, with the sector its boundary's
   sidedefs face into. A sector in several pieces gives a zone each; a region with no sector,
   such as the inside of a pillar, is solid.
@@ -287,6 +289,7 @@ the defaults (floor 0, ceiling 160, floor `KRRR`, ceiling `KKKB`; new edges `BBR
 | `src/map/check.ts` | What makes a map well formed |
 | `src/map/format.ts` | Reading and writing the text format |
 | `src/map/planarize.ts` | Making edges planar again after an edit |
+| `src/map/straighten.ts` | Edges that run straight on through a vertex joined into one |
 | `src/map/zones.ts` | Rebuilding the zones after an edit, keeping their properties |
 | `src/map/edit.ts` | The editing operations |
 | `src/map/faces.ts` | What an edge draws: wall, riser or lintel |
