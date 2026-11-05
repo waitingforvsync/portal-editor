@@ -267,8 +267,8 @@
 <body>
     <div id="toolbar">
         <div class="group">
-            <button id="geometry" title="Geometry mode: click to add a vertex, drag to draw an edge">Geometry<kbd>G</kbd></button>
-            <button id="select" title="Selection mode: click to select, drag to move or box-select">Select<kbd>S</kbd></button>
+            <button id="select" title="Selection mode: click to select, drag to move or box-select (Shift: geometry)">Select<kbd>S</kbd></button>
+            <button id="geometry" title="Geometry mode: click to add a vertex, drag to draw an edge (Shift: selection)">Geometry<kbd>G</kbd></button>
             <button id="player" title="Player mode: click to put the start, drag to aim it">Player<kbd>P</kbd></button>
         </div>
         <div class="group">
@@ -297,7 +297,7 @@
         <aside id="panel"></aside>
     </div>
     <div id="status"></div>
-    <div id="help">Shift: select, adding  |  Esc: clear selection  |  Del: delete edges, then vertices  |  arrows: nudge  |  Ctrl+X/C/V: cut, copy, paste  |  wheel: zoom  |  right-drag: pan  |  3D: drag to turn, click to select</div>
+    <div id="help">Shift: geometry (or selection)  |  Ctrl: add to the selection  |  Esc: clear selection  |  Del: delete edges, then vertices  |  arrows: nudge  |  Ctrl+X/C/V: cut, copy, paste  |  wheel: zoom  |  right-drag: pan  |  3D: drag to turn, click to select</div>
     <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

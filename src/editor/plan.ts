@@ -1,9 +1,10 @@
 // plan.ts - the plan view: draws the map from above, and turns the pointer and keys into
-// edits. Geometry mode places vertices and draws edges; selection mode selects and moves
-// them; player mode puts the start and aims it. Holding Shift selects in geometry mode,
-// adding to the selection. Player mode has no selection: it's kept, unseen, for the other
-// modes. While an edge is drawn, a selection moved or the start put, the view shows what
-// committing it there would make, snapped.
+// edits. Selection mode selects and moves vertices; geometry mode places them and draws
+// edges; player mode puts the start and aims it. Holding Shift switches between selection
+// and geometry, and Ctrl (or Cmd) adds to the selection rather than replacing it. Player mode
+// has no selection: it's kept, unseen, for the other modes. While an edge is drawn, a
+// selection moved or the start put, the view shows what committing it there would make,
+// snapped.
 //
 // Cut and copy put the selection on the clipboard as a map in the text format; paste takes a
 // map from the clipboard and floats it, its middle at the pointer, until a click puts it down.
@@ -204,7 +205,7 @@ export class PlanView {
 
     private get selecting(): boolean {
         const { mode } = this.editor;
-        return mode === 'select' || (mode === 'geometry' && this.shift);
+        return mode === 'select' ? !this.shift : mode === 'geometry' && this.shift;
     }
 
     private get playing(): boolean {
@@ -236,7 +237,7 @@ export class PlanView {
         } else if (e.button === 0) {
             const { doc } = this.editor;
             this.gesture = {
-                kind: 'press', sx, sy, selecting: this.selecting, adding: e.shiftKey,
+                kind: 'press', sx, sy, selecting: this.selecting, adding: e.ctrlKey || e.metaKey,
                 hit: hitTest(doc, this.view, sx, sy, true),
                 snap: snapAt(doc, this.view, sx, sy, this.editor.grid),
             };

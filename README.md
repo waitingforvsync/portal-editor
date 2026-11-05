@@ -48,8 +48,26 @@ relative paths (`base` in `vite.config.ts`), so it works under the repository's 
 ## Using the editor
 
 The plan view, on the left, shows the map from above, x up the screen and y to the right,
-zones in their floor shades and solid zones hatched. It has three modes: geometry (G),
-selection (S) and player (P). The 3D view is beside it, and the divider between them moves.
+zones in their floor shades and solid zones hatched. It has three modes: selection (S),
+geometry (G) and player (P). The 3D view is beside it, and the divider between them moves.
+
+### Selection mode (S)
+
+The editor starts in selection mode.
+
+| Action | Does |
+|--------|------|
+| Click a vertex, edge or zone | Selects it, in place of the selection |
+| Click in space | Clears the selection |
+| Drag something | Moves the selection, selecting what's dragged first if it isn't |
+| Drag from space | Selects what lies inside the box |
+
+Holding Ctrl (or Cmd) adds to the selection rather than replacing it; Ctrl+click in space
+still clears it.
+
+The selection is a set of vertices. An edge is selected when both its ends are, and a zone
+when every vertex of its outline is (the vertices of its holes don't count), so selecting a
+zone doesn't select what's inside it.
 
 ### Geometry mode (G)
 
@@ -64,21 +82,8 @@ A drawn edge starts and ends on a vertex, or on an edge (splitting it), or at a 
 Where it crosses edges, they all split there. Closing an outline makes a zone. The line and
 the vertices along it end up selected.
 
-### Selection mode (S)
-
-| Action | Does |
-|--------|------|
-| Click a vertex, edge or zone | Selects it, in place of the selection |
-| Click in space | Clears the selection |
-| Drag something | Moves the selection, selecting what's dragged first if it isn't |
-| Drag from space | Selects what lies inside the box |
-
-Holding Shift in geometry mode selects as selection mode does, and in either mode adds to
-the selection rather than replacing it; Shift+click in space still clears it.
-
-The selection is a set of vertices. An edge is selected when both its ends are, and a zone
-when every vertex of its outline is (the vertices of its holes don't count), so selecting a
-zone doesn't select what's inside it.
+Holding Shift switches between selection and geometry: in selection mode, Shift+click adds a
+vertex and Shift+drag draws an edge; in geometry mode, Shift selects as selection mode does.
 
 ### Player mode (P)
 
@@ -168,7 +173,7 @@ the 3D view's own.
 | Drag | Turns the camera: across to circle round, up and down to tilt, from below the floors to straight down |
 | Click a wall, riser or lintel | Selects its edge, in place of the selection |
 | Click a floor or ceiling | Selects its zone, in place of the selection |
-| Shift+click | Adds to the selection, or clears it on nothing |
+| Ctrl+click (or Cmd+click) | Adds to the selection, or clears it on nothing |
 | Click on nothing | Clears the selection |
 | Wheel | Zooms both views |
 | Right or middle drag | Pans both views |

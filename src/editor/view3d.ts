@@ -2,7 +2,7 @@
 // centre, at the middle of the map's heights. It shares the plan's pan and zoom (right drag
 // pans and the wheel zooms, in either view; the zoom sets how far off the camera is) and has
 // its own yaw and pitch (left drag). A click selects: a wall, riser or lintel selects its edge,
-// a floor, ceiling, top or bottom its zone; with Shift it adds to the selection, and a click on
+// a floor or ceiling its zone; with Ctrl (or Cmd) it adds to the selection, and a click on
 // nothing clears it. It shows what the plan shows, an edit under way included.
 
 import type { Doc } from '../map/edit';
@@ -90,7 +90,7 @@ export class View3D {
         }
         const [sx, sy] = this.local(e);
         if (e.button === 0) {
-            this.gesture = { kind: 'press', sx, sy, adding: e.shiftKey };
+            this.gesture = { kind: 'press', sx, sy, adding: e.ctrlKey || e.metaKey };
         } else if (e.button === 1 || e.button === 2) {
             // the point grabbed on the level of the target stays under the pointer
             const grab = Camera.onLevel(this.camera.ray(sx, sy), this.camera.target[2]);

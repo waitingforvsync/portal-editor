@@ -27,7 +27,7 @@ export class Editor {
     private readonly listeners = new Set<() => void>();
     private merging: string | undefined;    // the last commit's merge key, while it may merge
 
-    mode: Mode = 'geometry';
+    mode: Mode = 'select';
     gridOn = true;
     gridSize = 16;
     dither = false;      // the 3D view in the engine's dithers, else their average colours
