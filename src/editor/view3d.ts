@@ -31,9 +31,6 @@ function describe(surface: Surface, doc: Doc): string {
         case 'riser':
         case 'lintel':
             return `${surface.kind} of edge ${surface.owner}`;
-        case 'top':
-        case 'bottom':
-            return `${surface.kind} of solid zone ${surface.owner}`;
         default:
             return `${surface.kind} of zone ${surface.owner}`
                 + ` (${surface.kind === 'floor' ? doc.map.zones[surface.owner]!.floor

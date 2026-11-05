@@ -1,7 +1,7 @@
 // renderer.ts - draws a scene (scene.ts) with WebGL2. Surfaces show only their front, in their
 // shades: dithered as the engine draws them, each 4x2 tile laid on the screen's own pixels,
-// or in the tiles' average colours. Solid tops and bottoms are hatched. Outlines run along
-// the surfaces' edges where the surface faces the eye, and overlay lines (markers) go on top.
+// or in the tiles' average colours. Outlines run along the surfaces' edges where the surface
+// faces the eye, and overlay lines (markers) go on top.
 
 import { HARDWARE_RGB, NUM_SHADES, shadeTile } from '../map/shades';
 import type { Camera, Vec3 } from './camera';
@@ -33,7 +33,6 @@ precision highp int;
 uniform highp sampler2D tiles;
 uniform vec2 pixel;      // a Beeb pixel, in device pixels
 uniform float top;       // the canvas's height, in device pixels
-uniform float ratio;     // device pixels to a CSS pixel
 uniform bool dither;
 flat in int vShade;
 flat in int vFlags;
@@ -43,10 +42,7 @@ vec3 tile(int x, int y) {
 }
 void main() {
     vec3 c;
-    if (vShade < 0) {
-        bool stripe = mod(gl_FragCoord.x + gl_FragCoord.y, 8.0 * ratio) < 2.0 * ratio;
-        c = stripe ? vec3(0.29, 0.306, 0.341) : vec3(0.165, 0.18, 0.208);
-    } else if (dither) {
+    if (dither) {
         ivec2 p = ivec2(gl_FragCoord.x / pixel.x, (top - gl_FragCoord.y) / pixel.y);
         c = tile(p.x & 3, p.y & 1);
     } else {
@@ -261,7 +257,6 @@ export class Renderer {
         gl.uniformMatrix4fv(at('matrix'), false, matrix);
         gl.uniform2f(at('pixel'), 4 * options.ratio, 2 * options.ratio);
         gl.uniform1f(at('top'), canvas.height);
-        gl.uniform1f(at('ratio'), options.ratio);
         gl.uniform1i(at('dither'), options.dither ? 1 : 0);
         gl.uniform1i(at('tiles'), 0);
         gl.bindVertexArray(this.surfaces.vao);

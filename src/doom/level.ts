@@ -1,10 +1,11 @@
 // level.ts - a Doom level as a map. Its linedefs become edges, between only the vertices they
 // use (not those the node builder added for its splits), and each region they enclose becomes
 // a zone with its sector's heights. A sector in several pieces gives a zone each; a region
-// with no sector, such as the inside of a pillar, is solid. Shades are the nearest to the
-// average colours of the flats and textures. Doom's map is scaled up by SCALE, bringing its
-// eye height (41) near the engine's (80), and laid out as Doom's automap shows it, north up
-// the page and east to the right.
+// with no sector, such as the inside of a pillar, is solid. Each surface's shade comes from
+// its flat's or texture's average colour, spread over the shades and lit by the way it faces
+// (colour.ts). Doom's map is scaled up by SCALE, bringing its eye height (41) near the
+// engine's (80), and laid out as Doom's automap shows it, north up the page and east to the
+// right.
 
 import type { Doc, EdgeStyle } from '../map/edit';
 import { docFromMap } from '../map/edit';
@@ -12,9 +13,9 @@ import { checkMap } from '../map/check';
 import type { Edge, PortalMap, Zone } from '../map/map';
 import { planarize, type DraftEdge } from '../map/planarize';
 import { findRegions } from '../map/regions';
-import { nearestShade, shadeFromName, shadeName } from '../map/shades';
 import { ANGLE_STEPS, COORD_MAX, HEIGHT_STEP, toCoord, toHeight } from '../map/units';
 import type { ZoneStyle } from '../map/zones';
+import { shadeSurfaces, type Direction, type Surface } from './colour';
 import {
     flatColour, NO_TEXTURE, readLevel, readPalette, SKY_FLAT, textureColours,
     type DoomVertex, type Linedef, type Linear, type Sidedef, type Wad,
@@ -24,8 +25,9 @@ export const SCALE = 2;
 const MARGIN = 256;      // units left round the map, inside the coordinate range
 const DOOR_LIP = 4;      // an open door stops this far below its lowest neighbouring ceiling
 const PLAYER_START = 1;  // the thing type of player 1's start
-const EXPOSURE = 2;      // colours brightened before matching: Doom's are dark, the shades bright
-const FALLBACK = shadeFromName('KBRG')!;    // for a texture or flat the WAD doesn't have
+const FALLBACK: Linear = [0.05, 0.05, 0.05];    // for a texture or flat the WAD doesn't have
+const UP: Direction = [0, 0, 1];
+const DOWN: Direction = [0, 0, -1];
 
 export interface Imported {
     doc: Doc;
@@ -56,25 +58,29 @@ export function importLevel(wad: Wad, name: string): Imported {
     const notes: string[] = [];
     const sectorOf = (side: number) => (side < 0 ? -1 : sidedefs[side]?.sector ?? -1);
 
-    // ---- shades ----
+    // ---- colours: each flat's and texture's average ----
 
     const palette = readPalette(wad);
     const textures = textureColours(wad, palette);
     const missing = new Set<string>();
-    const shadeOf = (colour: Linear | undefined, what: string): number => {
+    const known = (colour: Linear | undefined, what: string): Linear => {
         if (!colour) {
             missing.add(what);
-            return FALLBACK;
         }
-        const [r, g, b] = colour.map((c) => Math.min(1, c * EXPOSURE));
-        return nearestShade([r!, g!, b!]);
+        return colour ?? FALLBACK;
     };
-    const sky = shadeOf(textures.get(skyTexture(name)), skyTexture(name));
-    const flatShade = (flat: string) =>
-        (flat === SKY_FLAT ? sky : shadeOf(flatColour(wad, palette, flat), flat));
-    const textureShade = (texture: string): number | undefined =>
-        (texture === NO_TEXTURE || texture === '' ? undefined
-            : shadeOf(textures.get(texture), texture));
+    const sky = known(textures.get(skyTexture(name)), skyTexture(name));
+    const flatColours = new Map<string, Linear>();
+    const flat = (name: string): Linear => {
+        let colour = flatColours.get(name);
+        if (!colour) {
+            colour = name === SKY_FLAT ? sky : known(flatColour(wad, palette, name), name);
+            flatColours.set(name, colour);
+        }
+        return colour;
+    };
+    const texture = (name: string): Linear | undefined =>
+        (name === NO_TEXTURE || name === '' ? undefined : known(textures.get(name), name));
 
     // ---- sectors: heights scaled, closed doors opened ----
 
@@ -108,7 +114,7 @@ export function importLevel(wad: Wad, name: string): Imported {
         }
         return {
             solid, floor: toHeight(floor), ceiling: toHeight(solid ? floor + HEIGHT_STEP : top),
-            floorShade: flatShade(s.floorFlat), ceilingShade: flatShade(s.ceilingFlat),
+            floorShade: 0, ceilingShade: 0,    // shaded below
         };
     });
 
@@ -135,43 +141,82 @@ export function importLevel(wad: Wad, name: string): Imported {
     }
 
     // A wall seen from its open side; a lintel from the higher ceiling's side, a riser from
-    // the lower floor's. A missing texture falls back on the other side's, then any other.
-    const edgeStyle = (l: Linedef): EdgeStyle => {
+    // the lower floor's: each with its texture's colour and the way it faces, in the map's
+    // terms (Doom's east is the map's y, north its x). A missing texture falls back on the
+    // other side's, then any other. The top is the wall or lintel, the bottom the riser.
+    const faces = (l: Linedef): { top: Surface; bottom?: Surface } => {
         const front = l.front >= 0 ? sidedefs[l.front] : undefined;
         const back = l.back >= 0 ? sidedefs[l.back] : undefined;
         const f = front ? styles[front.sector] : undefined;
         const b = back ? styles[back.sector] : undefined;
-        const any = (...sides: (Sidedef | undefined)[]) => {
+        const p = level.vertices[l.v1]!;
+        const q = level.vertices[l.v2]!;
+        const length = Math.hypot(q.x - p.x, q.y - p.y);
+        const toFront: Direction = [-(q.x - p.x) / length, (q.y - p.y) / length, 0];
+        const facing = (side: Sidedef | undefined): Direction =>
+            (side === front ? toFront : [-toFront[0], -toFront[1], 0]);
+        const any = (...sides: (Sidedef | undefined)[]): Linear => {
             for (const side of sides) {
-                for (const texture of [side?.middle, side?.upper, side?.lower]) {
-                    const shade = texture === undefined ? undefined : textureShade(texture);
-                    if (shade !== undefined) {
-                        return shade;
+                for (const name of [side?.middle, side?.upper, side?.lower]) {
+                    const colour = name === undefined ? undefined : texture(name);
+                    if (colour) {
+                        return colour;
                     }
                 }
             }
+            missing.add('a line with no textures');
             return FALLBACK;
         };
         if (!f || !b || f.solid || b.solid) {
             const open = f && !f.solid ? front : back;
-            const shade = any(open, open === front ? back : front);
-            return { topShade: shade, bottomShade: shade };
+            const colour = any(open, open === front ? back : front);
+            return { top: { colour, normal: facing(open) } };
         }
-        let lintel: number | undefined;
-        let riser: number | undefined;
+        let lintel: Surface | undefined;
+        let riser: Surface | undefined;
         if (f.ceiling !== b.ceiling) {
             const [near, far] = f.ceiling > b.ceiling ? [front, back] : [back, front];
             const skies = sectors[front!.sector]!.ceilingFlat === SKY_FLAT
                 && sectors[back!.sector]!.ceilingFlat === SKY_FLAT;
-            lintel = skies ? sky
-                : textureShade(near!.upper) ?? textureShade(far!.upper) ?? any(near, far);
+            lintel = skies ? { colour: sky }    // the sky shows there: lit by nothing
+                : {
+                    colour: texture(near!.upper) ?? texture(far!.upper) ?? any(near, far),
+                    normal: facing(near),
+                };
         }
         if (f.floor !== b.floor) {
             const [near, far] = f.floor < b.floor ? [front, back] : [back, front];
-            riser = textureShade(near!.lower) ?? textureShade(far!.lower) ?? any(near, far);
+            riser = {
+                colour: texture(near!.lower) ?? texture(far!.lower) ?? any(near, far),
+                normal: facing(near),
+            };
         }
-        const top = lintel ?? riser ?? any(front, back);
-        return { topShade: top, bottomShade: riser ?? top };
+        const top = lintel ?? riser ?? { colour: any(front, back), normal: toFront };
+        return { top, bottom: riser };
+    };
+
+    // ---- shades: every surface's, spread over the shades together ----
+
+    const surfaces: Surface[] = [];
+    const add = (surface: Surface) => surfaces.push(surface) - 1;
+    const sectorSurfaces = sectors.map((s) => ({
+        floor: add({ colour: flat(s.floorFlat), normal: UP }),
+        ceiling: add(s.ceilingFlat === SKY_FLAT ? { colour: sky }
+            : { colour: flat(s.ceilingFlat), normal: DOWN }),
+    }));
+    const lineSurfaces = lines.map(({ l }) => {
+        const { top, bottom } = faces(l);
+        return { top: add(top), bottom: bottom && add(bottom) };
+    });
+    const shades = shadeSurfaces(surfaces);
+    styles.forEach((style, i) => {
+        style.floorShade = shades[sectorSurfaces[i]!.floor]!;
+        style.ceilingShade = shades[sectorSurfaces[i]!.ceiling]!;
+    });
+    const edgeStyle = (k: number): EdgeStyle => {
+        const { top, bottom } = lineSurfaces[k]!;
+        const topShade = shades[top]!;
+        return { topShade, bottomShade: bottom === undefined ? topShade : shades[bottom]! };
     };
 
     // ---- vertices: those the lines use, scaled, north up the page ----
@@ -195,8 +240,8 @@ export function importLevel(wad: Wad, name: string): Imported {
             + `${COORD_MAX}`);
     }
     const index = new Map(used.map((v, i) => [v, i]));
-    const draft: DraftEdge[] = lines.map(({ l, i }) => ({
-        a: index.get(l.v1)!, b: index.get(l.v2)!, ...edgeStyle(l), source: i, rank: 1, tags: 0,
+    const draft: DraftEdge[] = lines.map(({ l, i }, k) => ({
+        a: index.get(l.v1)!, b: index.get(l.v2)!, ...edgeStyle(k), source: i, rank: 1, tags: 0,
     }));
     const planar = planarize(placed.map((p) => ({ x: toCoord(p.x), y: toCoord(p.y) })), draft);
     if (planar.vertices.length !== placed.length || planar.edges.length !== draft.length) {
@@ -255,7 +300,7 @@ export function importLevel(wad: Wad, name: string): Imported {
         notes.push(`${voids} enclosed regions with no sector (inside pillars, say): solid zones`);
     }
     if (missing.size) {
-        notes.push(`not in the WAD, so ${shadeName(FALLBACK)}: ${[...missing].sort().join(', ')}`);
+        notes.push(`not in the WAD, so a dark grey: ${[...missing].sort().join(', ')}`);
     }
 
     // ---- the start: player 1's ----

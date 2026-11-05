@@ -98,7 +98,7 @@ export function shadeRgb(shade: number): [number, number, number] {
 // ---- matching colours ----
 
 // CIELAB (D65) from linear sRGB, each channel 0 to 1.
-function lab([r, g, b]: readonly number[]): [number, number, number] {
+export function lab([r, g, b]: readonly number[]): [number, number, number] {
     const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
     const x = f((0.4124 * r! + 0.3576 * g! + 0.1805 * b!) / 0.95047);
     const y = f(0.2126 * r! + 0.7152 * g! + 0.0722 * b!);

@@ -177,10 +177,9 @@ Every surface shows from one side only, so from outside the map you see into it.
 draws a wall between an open zone and the outside or a solid zone, in its top shade; a riser
 where two floors differ, seen from the lower, in its bottom shade; and a lintel where two
 ceilings differ, seen from the higher, in its top shade. Floors face up and ceilings down. A
-solid zone gets a hatched top at the highest ceiling beside it and a bottom at the lowest
-floor, so a pillar reads as solid; the outside gets nothing. Shades show as flat colours, or
-as the engine dithers them (D), each 4x2 tile laid on the screen's pixels at the Beeb's 2:1
-pixel shape.
+solid zone, like the outside, has no surfaces of its own: a pillar shows as the walls round
+it. Shades show as flat colours, or as the engine dithers them (D), each 4x2 tile laid on the
+screen's pixels at the Beeb's 2:1 pixel shape.
 
 Selected surfaces are tinted amber, with posts up the selected vertices; the surface under
 the pointer is lit, and named in the status line. The start shows as a post up to eye height
@@ -223,11 +222,19 @@ git ignores them, so they stay out of this repository.
   engine's (80), and laid out as Doom's automap shows it, north up the page. A closed sector
   (a door) is opened to 4 below its neighbours' lowest ceiling, as a door opens; one with no
   room to open is solid.
-- **Shades.** Each flat and wall texture's average colour, in linear light and doubled
-  (Doom's textures are dark and the shades bright), takes the nearest shade in CIELAB. A
-  wall takes its middle texture; a lintel the upper texture on the side it's seen from (the
-  sky's, between two skies), a riser the lower texture on its side. A sky ceiling takes the
-  sky texture's shade.
+- **Shades.** Each surface starts from its flat's or texture's average colour: a wall's
+  middle texture, a lintel's upper texture on the side it's seen from (the sky, between two
+  skies), a riser's lower texture on its side, a sky ceiling the sky's. Doom's colours are
+  dark and mostly near grey, while the shades are one grey and the rest pure colours, the
+  purest the brightest, so the level's colours are spread over them (`src/doom/colour.ts`):
+  - a colour as saturated as the level's middling ones takes its hue (as the eye sees it)
+    at full saturation, while near-greys stay grey;
+  - lightness goes by rank among the level's surfaces;
+  - the colours least like the level's average go towards full light: the acid among
+    E1M1's browns becomes bright green.
+- **Lighting.** Floors take all the light, from above; ceilings less; walls, lintels and
+  risers more the more squarely they face the north-west. Then each surface takes the
+  nearest shade in CIELAB.
 - **The start** is player 1's, facing the same way.
 
 Things other than the start, lighting, specials and tags aren't imported. Most of Doom's

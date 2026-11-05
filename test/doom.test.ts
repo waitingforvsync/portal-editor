@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+import { lighting, shadeSurfaces, type Surface } from '../src/doom/colour';
 import { importLevel, SCALE } from '../src/doom/level';
 import { levelNames, readLevel, readWad } from '../src/doom/wad';
 import { checkMap } from '../src/map/check';
 import { zoneAt } from '../src/editor/hit';
 import { exportMap } from '../src/map/export';
-import { nearestShade, shadeFromName } from '../src/map/shades';
+import { nearestShade, shadeFromName, shadeRgb } from '../src/map/shades';
 
 // ---- a WAD made here: lumps written as Doom lays them out ----
 
@@ -167,6 +168,47 @@ describe('nearestShade', () => {
     });
 });
 
+describe('lighting', () => {
+    it('lights floors fully, ceilings less, and walls by how they face the north-west', () => {
+        const h = Math.SQRT1_2;
+        expect(lighting([0, 0, 1])).toBe(1);
+        expect(lighting(undefined)).toBe(1);
+        expect(lighting([0, 0, -1])).toBeLessThan(1);
+        expect(lighting([h, -h, 0])).toBeCloseTo(1);
+        expect(lighting([-h, h, 0])).toBeCloseTo(0.5);
+        expect(lighting([1, 0, 0])).toBeGreaterThan(lighting([0, 1, 0]));
+    });
+});
+
+describe('shadeSurfaces', () => {
+    const UP = [0, 0, 1] as const;
+    const grey = (c: number): Surface => ({ colour: [c, c, c], normal: [...UP] });
+    // a dim level of greys, and the one dim, strong green in it
+    const level: Surface[] = [0.02, 0.04, 0.06, 0.08, 0.1, 0.12].map(grey);
+    level.push({ colour: [0.01, 0.04, 0.006], normal: [...UP] });
+    const shades = shadeSurfaces(level);
+
+    it('takes the most saturated colours to the purest, brightest shades', () => {
+        expect(shades.at(-1)).toBe(shadeFromName('GGGG'));
+    });
+
+    it('spreads the level\'s dim greys, the darkest darker, the lightest the one grey', () => {
+        const light = (s: number) => shadeRgb(s).reduce((sum, c) => sum + c);
+        for (let i = 1; i < 6; i++) {
+            expect(light(shades[i]!)).toBeGreaterThanOrEqual(light(shades[i - 1]!));
+        }
+        expect(shades[5]).toBe(shadeFromName('KBRG'));
+    });
+
+    it('darkens what faces away from the light', () => {
+        const wall = (x: number, y: number): Surface =>
+            ({ colour: [0.01, 0.04, 0.006], normal: [x, y, 0] });
+        const [lit, shaded] = shadeSurfaces([...level, wall(1, -1), wall(-1, 1)]).slice(-2);
+        const light = (s: number) => shadeRgb(s).reduce((sum, c) => sum + c);
+        expect(light(lit!)).toBeGreaterThan(light(shaded!));
+    });
+});
+
 describe('importLevel', () => {
     const { doc, notes } = importLevel(readWad(TEST_WAD), 'E1M1');
     const { map } = doc;
@@ -208,10 +250,13 @@ describe('importLevel', () => {
         });
     });
 
-    it('shades floors and ceilings by their flats', () => {
-        expect(zoneOver(128, 200)).toMatchObject({
-            floorShade: shadeFromName('GGGG'), ceilingShade: shadeFromName('RRRR'),
-        });
+    it('shades floors and ceilings by their flats, ceilings in less light', () => {
+        const zone = zoneOver(128, 200)!;
+        expect(zone.floorShade).toBe(shadeFromName('GGGG'));
+        const [r, g, b] = shadeRgb(zone.ceilingShade);
+        expect([g, b]).toEqual([0, 0]);
+        expect(r).toBeGreaterThan(0);
+        expect(r).toBeLessThan(255);
     });
 
     it('starts where player 1 does, facing the same way', () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import demoText from '../maps/demo.pmap?raw';
 import { add, Camera, cross, distanceFor, dot, type Vec3 } from '../src/editor/camera';
-import { buildScene, pick, SOLID_SHADE, type Surface } from '../src/editor/scene';
+import { buildScene, pick, type Surface } from '../src/editor/scene';
 import { docFromMap, restyleEdges, type Doc } from '../src/map/edit';
 import { parseMap } from '../src/map/format';
 import { ringArea2 } from '../src/map/geometry';
@@ -113,16 +113,17 @@ describe('buildScene', () => {
         }
     });
 
-    it('closes the solid pillar at the heights of the room round it', () => {
+    it('leaves a solid zone open, as the outside is: the walls round it show it', () => {
         const pillar = doc.map.zones.findIndex((z) => z.solid);
-        const [top] = of('top');
-        const [bottom] = of('bottom');
-        expect(top!.owner).toBe(pillar);
-        expect(top!.shade).toBe(SOLID_SHADE);
-        expect(top!.triangles.every((p) => p[2] === 160)).toBe(true);
-        expect(bottom!.triangles.every((p) => p[2] === -32)).toBe(true);
-        expect(top!.normal).toEqual([0, 0, 1]);
-        expect(bottom!.normal).toEqual([0, 0, -1]);
+        const owned = scene.surfaces.filter((s) => (s.kind === 'floor' || s.kind === 'ceiling')
+            && s.owner === pillar);
+        expect(owned).toEqual([]);
+        const walls = of('wall').filter((s) => {
+            const e = doc.map.edges[s.owner]!;
+            const ring = doc.regions[pillar]!.perimeter;
+            return ring.includes(e.a) && ring.includes(e.b);
+        });
+        expect(walls).toHaveLength(4);
     });
 
     it('makes the walls, risers and lintels the edges show', () => {

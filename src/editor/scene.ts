@@ -2,17 +2,14 @@
 // each flat and seen from one side, made of triangles and outlined along its edges. An edge
 // makes walls and lintels in its top shade and risers in its bottom shade (faces.ts); an open
 // zone makes a floor and a ceiling, each a fan of triangles across each of its convex cells
-// (cells.ts); a solid zone, beside open ones, a top at their highest ceiling and a bottom at
-// their lowest floor. The outside makes nothing.
+// (cells.ts). A solid zone, like the outside, makes nothing: it shows as the walls round it.
 
 import type { Doc } from '../map/edit';
 import { edgeZones, placeFaces } from '../map/faces';
 import { fan, zoneCells } from '../map/cells';
 import { add, cross, dot, normalize, type Ray, type Vec3 } from './camera';
 
-export type SurfaceKind = 'wall' | 'riser' | 'lintel' | 'floor' | 'ceiling' | 'top' | 'bottom';
-
-export const SOLID_SHADE = -1;    // a solid zone's top and bottom, which have no shade
+export type SurfaceKind = 'wall' | 'riser' | 'lintel' | 'floor' | 'ceiling';
 
 export interface Surface {
     kind: SurfaceKind;
@@ -73,41 +70,23 @@ export function buildScene(doc: Doc): Scene {
         }
     });
 
-    // the open zones beside each zone, and at each vertex
-    const beside = zones.map((): number[] => []);
-    sides.forEach(([right, left]) => {
-        if (right >= 0 && left >= 0) {
-            beside[right]!.push(left);
-            beside[left]!.push(right);
-        }
-    });
+    // the open zones' heights at each vertex, and overall
     const spans: ([number, number] | undefined)[] = vertices.map(() => undefined);
     const widen = (span: [number, number] | undefined, low: number,
         high: number): [number, number] =>
         (span ? [Math.min(span[0], low), Math.max(span[1], high)] : [low, high]);
     let all: [number, number] | undefined;
 
-    // floors and ceilings, and solid zones' tops and bottoms
+    // the open zones' floors and ceilings
     zones.forEach((zone, z) => {
+        if (zone.solid) {
+            return;
+        }
         const region = regions[z]!;
         const cycles = [region.perimeter, ...region.holes];
-        let level: [number, number] | undefined;
-        if (!zone.solid) {
-            level = [zone.floor, zone.ceiling];
-            all = widen(all, zone.floor, zone.ceiling);
-            for (const v of cycles.flat()) {
-                spans[v] = widen(spans[v], zone.floor, zone.ceiling);
-            }
-        } else {
-            for (const other of beside[z]!) {
-                const o = zones[other]!;
-                if (!o.solid) {
-                    level = widen(level, o.floor, o.ceiling);
-                }
-            }
-        }
-        if (!level) {
-            return;
+        all = widen(all, zone.floor, zone.ceiling);
+        for (const v of cycles.flat()) {
+            spans[v] = widen(spans[v], zone.floor, zone.ceiling);
         }
         const triangles = cells[z]!.flatMap((cell) => fan(vertices, cell));
         const flat = (kind: SurfaceKind, height: number, up: boolean, shade: number) => {
@@ -119,13 +98,8 @@ export function buildScene(doc: Doc): Scene {
                 outline: cycles.flatMap((cycle) => loop(cycle.map((v) => at(v, height)))),
             });
         };
-        if (zone.solid) {
-            flat('top', level[1], true, SOLID_SHADE);
-            flat('bottom', level[0], false, SOLID_SHADE);
-        } else {
-            flat('floor', zone.floor, true, zone.floorShade);
-            flat('ceiling', zone.ceiling, false, zone.ceilingShade);
-        }
+        flat('floor', zone.floor, true, zone.floorShade);
+        flat('ceiling', zone.ceiling, false, zone.ceilingShade);
     });
 
     const [low, high] = all ?? DEFAULT_SPAN;
