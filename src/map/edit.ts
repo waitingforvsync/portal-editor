@@ -237,6 +237,60 @@ export function deleteVertices(
     };
 }
 
+// The selected vertices, the edges between them and the zones they make, as a map of their
+// own: each zone keeps the properties of the zone it was part of. What cut and copy take.
+export function extract(doc: Doc, which: ReadonlySet<number>, defaults: EditDefaults): Doc {
+    const others = new Set([...doc.map.vertices.keys()].filter((v) => !which.has(v)));
+    return deleteVertices(doc, others, defaults).doc;
+}
+
+// Paste a map (a clip) into a document, moved by dx, dy. It lands as a moved selection does:
+// edges split where they cross, vertices merge where they meet, and its zones win where they
+// overlap. vertexMap maps the document's vertices; added is the clip's, after. Throws if any
+// of it would be off the map.
+export function pasteMap(
+    doc: Doc, clip: Doc, dx: number, dy: number, defaults: EditDefaults,
+): EditResult {
+    const { map } = doc;
+    const n = map.vertices.length;
+    const m = map.edges.length;
+    const moved = clip.map.vertices.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+    if (!moved.every((p) => isCoord(p.x) && isCoord(p.y))) {
+        throw new RangeError(`pasting there would put vertices off the map: coordinates are `
+            + `whole numbers in 0..${COORD_MAX}`);
+    }
+    const on = moved.map((p) => ({ x: toCoord(p.x), y: toCoord(p.y) }));
+    // the document and the clip side by side, as one map before the edit
+    const shift = (cycle: readonly number[]) => cycle.map((v) => v + n);
+    const both: Doc = {
+        map: {
+            start: map.start,
+            vertices: [...map.vertices, ...on],
+            edges: [...map.edges, ...clip.map.edges.map((e) => ({ ...e, a: e.a + n, b: e.b + n }))],
+            zones: [...map.zones,
+                ...clip.map.zones.map((z) => ({ ...z, perimeter: shift(z.perimeter) }))],
+        },
+        regions: [...doc.regions, ...clip.regions.map((r) =>
+            ({ perimeter: shift(r.perimeter), holes: r.holes.map(shift) }))],
+        construction: [],
+    };
+    const draft = draftOf(both.map);
+    const pasted = (from: number, count: number) =>
+        Array.from({ length: count }, (_, i) => from + i);
+    const edges = pasted(m, clip.map.edges.length);
+    for (const e of edges) {
+        draft.edges[e]!.rank = 2;
+    }
+    const done = finish(both, draft, defaults,
+        { vertices: pasted(n, moved.length), edges },
+        { zones: new Set(pasted(map.zones.length, clip.map.zones.length)), edges: new Set(edges) });
+    return {
+        ...done,
+        vertexMap: done.vertexMap.slice(0, n),
+        added: [...new Set(done.vertexMap.slice(n))].sort((p, q) => p - q),
+    };
+}
+
 // Change zones' properties; the geometry stays. Throws if an open zone's floor would end up
 // at or above its ceiling.
 export function restyleZones(

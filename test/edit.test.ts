@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { checkMap } from '../src/map/check';
 import {
-    addEdge, addVertex, deleteEdges, deleteVertices, docFromMap, moveVertices, restyleEdges,
-    restyleZones, setStart, type Doc, type EditDefaults,
+    addEdge, addVertex, deleteEdges, deleteVertices, docFromMap, extract, moveVertices, pasteMap,
+    restyleEdges, restyleZones, setStart, type Doc, type EditDefaults,
 } from '../src/map/edit';
-import { parseMap } from '../src/map/format';
+import { parseMap, writeMap } from '../src/map/format';
 import { pointInRing } from '../src/map/geometry';
 import type { Zone } from '../src/map/map';
 import { shadeFromName } from '../src/map/shades';
@@ -347,3 +347,79 @@ describe('setStart', () => {
         expect(() => setStart(ROOM, 0, 0, 1.5)).toThrow(/isn't a whole number/);
     });
 });
+
+describe('extract', () => {
+    const TWO = docOf(...square(0, 0, 0, 100), ...square(4, 0, 200, 100),
+        zoneLine(0, 0), zoneLine(4, 32));
+
+    it('takes the selected zones, with their properties', () => {
+        const clip = extract(TWO, new Set([4, 5, 6, 7]), DEFAULTS);
+        expect(clip.map.vertices).toEqual(TWO.map.vertices.slice(4));
+        expect(clip.map.edges).toHaveLength(4);
+        expect(clip.map.zones).toHaveLength(1);
+        const { perimeter, ...style } = clip.map.zones[0]!;
+        const { perimeter: _, ...wanted } = TWO.map.zones[1]!;
+        expect(style).toEqual(wanted);
+        expect([...perimeter].sort()).toEqual([0, 1, 2, 3]);
+        expectValid(clip);
+    });
+
+    it('takes only the edges with both ends selected, and their shades', () => {
+        const shaded = restyleEdges(ROOM, [0], () => ({ topShade: 5, bottomShade: 9 }));
+        const clip = extract(shaded, new Set([0, 1, 2]), DEFAULTS);
+        expect(clip.map.edges).toEqual([
+            { a: 0, b: 1, topShade: 5, bottomShade: 9 },
+            { a: 1, b: 2, topShade: 0, bottomShade: 0 },
+        ]);
+        expect(clip.map.zones).toEqual([]);
+    });
+});
+
+describe('pasteMap', () => {
+    const TWO = docOf(...square(0, 0, 0, 100), ...square(4, 0, 200, 100),
+        zoneLine(0, 0), zoneLine(4, 32));
+    const clip = extract(TWO, new Set([4, 5, 6, 7]), DEFAULTS);    // floor 32, y 200 to 300
+
+    it('adds the clip where it is moved to, with its zones\' properties', () => {
+        const result = pasteMap(ROOM, clip, 0, 0, DEFAULTS);
+        expect(result.doc.map.vertices).toHaveLength(8);
+        expect(result.doc.map.zones).toHaveLength(2);
+        expect(floorAt(result.doc, 50, 50)).toBe(0);
+        expect(floorAt(result.doc, 50, 250)).toBe(32);
+        expect(result.vertexMap).toEqual([0, 1, 2, 3]);
+        expect(result.added).toEqual([4, 5, 6, 7]);
+        expectValid(result.doc);
+    });
+
+    it('wins where it overlaps, as a moved zone does', () => {
+        const result = pasteMap(ROOM, clip, 0, -150, DEFAULTS);    // y 50 to 150
+        expect(floorAt(result.doc, 50, 25)).toBe(0);
+        expect(floorAt(result.doc, 50, 75)).toBe(32);
+        expect(floorAt(result.doc, 50, 125)).toBe(32);
+        expectValid(result.doc);
+    });
+
+    it('merges vertices that meet, and edges that coincide', () => {
+        const result = pasteMap(ROOM, clip, 0, -100, DEFAULTS);    // y 100 to 200
+        expect(result.doc.map.vertices).toHaveLength(6);
+        expect(result.doc.map.edges).toHaveLength(7);
+        expect(result.added).toHaveLength(4);
+        expect(result.added).toEqual([2, 3, 4, 5]);    // 2 and 3 are the shared corners
+        expectValid(result.doc);
+    });
+
+    it('refuses to put anything off the map', () => {
+        expect(() => pasteMap(ROOM, clip, 0, -300, DEFAULTS)).toThrow(/off the map/);
+    });
+
+    it('pastes the same through the text format', () => {
+        const parsed = parseMap(writeMap(clip.map));
+        if (!parsed.ok) {
+            throw new Error(parsed.errors.join('\n'));
+        }
+        const text = docFromMap(parsed.map, parsed.zoneRegions);
+        expect(pasteMap(ROOM, text, 0, -150, DEFAULTS).doc.map)
+            .toEqual(pasteMap(ROOM, clip, 0, -150, DEFAULTS).doc.map);
+    });
+});
+

@@ -5,7 +5,8 @@ out: vertices, edges and their shades, zones and their heights and shades, and w
 player starts. The regions the edges enclose, and their holes, are worked out from the
 edges.
 
-`maps/demo.pmap` is portalc's demo scene (`pt_scene_init` in `map.c`) in this format.
+`maps/demo.pmap` is portalc's demo scene (`pt_scene_init` in `map.c`) in this format. Cut
+and copy put the selection on the clipboard in it too, and paste reads it from there.
 
 ## Example
 

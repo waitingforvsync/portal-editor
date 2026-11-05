@@ -5,10 +5,11 @@ Micro portal engine. Maps are made of vertices and edges; the regions the edges 
 zones, with floor and ceiling heights and shades.
 
 So far: the map text format (reading, checking and writing); a plan view for placing
-vertices, drawing edges, and selecting, moving and deleting them, with the zones and their
-convex cells worked out as you go; a 3D view of the map as the engine draws it; a
-properties panel for the selected zones, edges and vertices; and an export of the map as the
-engine loads it. It opens on the demo map.
+vertices, drawing edges, and selecting, moving, deleting, cutting, copying and pasting them,
+and for putting the player's start, with the zones and their convex cells worked out as you
+go; a 3D view of the map as the engine draws it; a properties panel for the selected zones,
+edges and vertices; and an export of the map as the engine loads it. It opens on the demo
+map.
 
 It runs at <https://waitingforvsync.github.io/portal-editor/>.
 
@@ -96,6 +97,7 @@ panel shows the start's x, y and angle.
 | Key or action | Does |
 |---------------|------|
 | Delete | Deletes the selected edges, leaving their ends selected; with no edges selected, deletes the selected vertices and their edges |
+| Ctrl+X, Ctrl+C, Ctrl+V | Cut, copy, paste: see below |
 | Arrows | Nudge the selection a grid step |
 | Esc | Cancels a drag under way, else clears the selection |
 | Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y | Undo, redo |
@@ -107,6 +109,20 @@ panel shows the start's x, y and angle.
 | Right or middle drag | Pans |
 | Ctrl+O, Ctrl+S | Opens a map; saves it (as a download) |
 | Ctrl+E | Exports the map as the engine loads it (as a download) |
+
+### Cut, copy and paste
+
+Copy (Ctrl+C) puts the selection on the clipboard as a map of its own, in the text format:
+the selected vertices, the edges between them and the zones they make, each zone keeping the
+properties of the zone it was part of. Cut (Ctrl+X) copies, then deletes the selected
+vertices and their edges.
+
+Paste (Ctrl+V) floats the clipboard's map with the middle of its extent at the pointer,
+moving in whole grid steps so what was on the grid stays on it. A click puts it down,
+selected, and Esc cancels; a right drag pans meanwhile. It lands as a moved selection does:
+edges split where they cross, vertices merge where they meet, and its zones win where they
+overlap. As the clipboard holds text, a map can be pasted from another tab, or from a text
+editor. Player mode has no selection, so it neither copies nor pastes.
 
 ### Properties panel
 

@@ -4,12 +4,16 @@
 // adding to the selection. Player mode has no selection: it's kept, unseen, for the other
 // modes. While an edge is drawn, a selection moved or the start put, the view shows what
 // committing it there would make, snapped.
+//
+// Cut and copy put the selection on the clipboard as a map in the text format; paste takes a
+// map from the clipboard and floats it, its middle at the pointer, until a click puts it down.
 
 import {
-    addEdge, addVertex, deleteEdges, deleteVertices, moveVertices, setStart,
-    type Doc, type EditResult, type Endpoint,
+    addEdge, addVertex, deleteEdges, deleteVertices, docFromMap, extract, moveVertices,
+    pasteMap, setStart, type Doc, type EditResult, type Endpoint,
 } from '../map/edit';
-import type { Start, Vertex } from '../map/map';
+import { parseMap, writeMap } from '../map/format';
+import type { PortalMap, Start, Vertex } from '../map/map';
 import { shadeRgb } from '../map/shades';
 import { zoneCells } from '../map/cells';
 import { ANGLE_STEPS, COORD_MAX } from '../map/units';
@@ -40,9 +44,14 @@ const COLOUR = {
     solid: '#4a4e57',
 };
 
+type Paste = {
+    kind: 'paste'; clip: Doc; what: string; middle: WorldPoint; dx: number; dy: number;
+    base?: Doc; result?: EditResult; selection: Selection;    // pasted into base
+};
+
 type Gesture =
     | { kind: 'idle' }
-    | { kind: 'pan'; sx: number; sy: number }
+    | { kind: 'pan'; sx: number; sy: number; resume?: Paste }    // a pan can pause a paste
     | {
         kind: 'press'; sx: number; sy: number; selecting: boolean; adding: boolean;
         hit: Hit; snap: Snap;
@@ -53,9 +62,33 @@ type Gesture =
         target?: Snap; dx: number; dy: number; result?: EditResult;
     }
     | { kind: 'box'; sx0: number; sy0: number; sx1: number; sy1: number; adding: boolean }
-    | { kind: 'player'; sx: number; sy: number; start: Start; aiming: boolean; doc: Doc };
+    | { kind: 'player'; sx: number; sy: number; start: Start; aiming: boolean; doc: Doc }
+    | Paste;
 
 const NOTHING: Selection = new Set();
+
+function count(n: number, one: string, many: string): string {
+    return `${n} ${n === 1 ? one : many}`;
+}
+
+function counts(vertices: number, edges: number, zones: number): string {
+    return [count(vertices, 'vertex', 'vertices'), count(edges, 'edge', 'edges'),
+        count(zones, 'zone', 'zones')].join(', ');
+}
+
+function describeMap(map: PortalMap): string {
+    return counts(map.vertices.length, map.edges.length, map.zones.length);
+}
+
+// Whether a clipboard event is the editor's: not one in a field, nor a copy of text selected
+// on the page.
+function clipboardEvent(e: ClipboardEvent): boolean {
+    const target = e.target as HTMLElement | null;
+    if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+        return false;
+    }
+    return e.type === 'paste' || (window.getSelection()?.isCollapsed ?? true);
+}
 
 function endpoint(snap: Snap): Endpoint {
     switch (snap.kind) {
@@ -118,6 +151,9 @@ export class PlanView {
         canvas.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         window.addEventListener('keydown', (e) => this.keyDown(e));
+        window.addEventListener('copy', (e) => this.copy(e));
+        window.addEventListener('cut', (e) => this.copy(e));
+        window.addEventListener('paste', (e) => this.paste(e));
         window.addEventListener('keyup', (e) => {
             if (e.key === 'Shift') {
                 this.shift = false;
@@ -179,11 +215,18 @@ export class PlanView {
         const [sx, sy] = this.local(e);
         this.pointer = { sx, sy };
         this.shift = e.shiftKey;
-        if (this.gesture.kind !== 'idle') {
+        const g = this.gesture;
+        if (g.kind === 'paste' && e.button === 0) {
+            this.putDown(g);
+            return;
+        }
+        if (g.kind !== 'idle' && g.kind !== 'paste') {
             return;
         }
         if (e.button === 1 || e.button === 2) {
-            this.gesture = { kind: 'pan', sx, sy };
+            this.gesture = { kind: 'pan', sx, sy, resume: g.kind === 'paste' ? g : undefined };
+        } else if (g.kind === 'paste') {
+            return;
         } else if (e.button === 0 && this.playing) {
             const { doc, grid } = this.editor;
             const at = roundToGrid(this.view.toWorld(sx, sy), grid);
@@ -234,6 +277,9 @@ export class PlanView {
             case 'player':
                 this.updatePlayer(g, sx, sy);
                 break;
+            case 'paste':
+                this.updatePaste(g, sx, sy);
+                break;
         }
         this.redraw();
     }
@@ -246,6 +292,12 @@ export class PlanView {
         }
         const { editor } = this;
         switch (g.kind) {
+            case 'pan':
+                if (g.resume) {
+                    this.gesture = g.resume;
+                    this.updatePaste(g.resume, ...this.local(e));
+                }
+                break;
             case 'press':
                 this.click(g);
                 break;
@@ -284,6 +336,8 @@ export class PlanView {
             this.updateMove(g, sx, sy);
         } else if (g.kind === 'player') {
             this.updatePlayer(g, sx, sy);
+        } else if (g.kind === 'paste') {
+            this.updatePaste(g, sx, sy);
         }
         this.redraw();
     }
@@ -333,6 +387,9 @@ export class PlanView {
                 break;
             case 'p':
             case 'P':
+                if (this.gesture.kind === 'paste') {
+                    this.cancel();    // player mode has no selection to paste into
+                }
                 editor.setMode('player');
                 break;
             case 'Escape':
@@ -561,6 +618,113 @@ export class PlanView {
         }
     }
 
+    // Copy the selection to the clipboard, as a map of its own; cut deletes it too.
+    private copy(e: ClipboardEvent) {
+        const { editor } = this;
+        const { doc, selection } = editor;
+        if (!clipboardEvent(e) || !e.clipboardData || this.gesture.kind !== 'idle') {
+            return;
+        }
+        if (this.playing || selection.size === 0) {
+            editor.tell(`nothing selected to ${e.type}`);
+            return;
+        }
+        const clip = extract(doc, selection, editor.defaults);
+        e.clipboardData.setData('text/plain', writeMap(clip.map));
+        e.preventDefault();
+        if (e.type === 'cut') {
+            const result = this.attempt(() => deleteVertices(doc, selection, editor.defaults));
+            if (!result) {
+                return;
+            }
+            editor.commit(result.doc, []);
+        }
+        editor.tell(`${e.type === 'cut' ? 'cut' : 'copied'} ${describeMap(clip.map)}`);
+    }
+
+    // Float the clipboard's map, its middle at the pointer (or the view's middle).
+    private paste(e: ClipboardEvent) {
+        const { editor, view } = this;
+        if (!clipboardEvent(e) || !e.clipboardData || this.gesture.kind !== 'idle') {
+            return;
+        }
+        e.preventDefault();
+        if (this.playing) {
+            editor.tell('paste in geometry or selection mode: player mode has no selection');
+            return;
+        }
+        const text = e.clipboardData.getData('text/plain');
+        const parsed = parseMap(text);
+        if (!parsed.ok) {
+            editor.tell(/^\s*portalmap\b/.test(text)
+                ? `can't paste: the clipboard's map doesn't load: ${parsed.errors[0]}`
+                : `nothing to paste: the clipboard doesn't hold a map`);
+            return;
+        }
+        const clip = docFromMap(parsed.map, parsed.zoneRegions);
+        const { vertices } = clip.map;
+        if (!vertices.length) {
+            editor.tell(`nothing to paste: the clipboard's map is empty`);
+            return;
+        }
+        const xs = vertices.map((p) => p.x);
+        const ys = vertices.map((p) => p.y);
+        const middle = {
+            x: (Math.min(...xs) + Math.max(...xs)) / 2,
+            y: (Math.min(...ys) + Math.max(...ys)) / 2,
+        };
+        const g: Paste = {
+            kind: 'paste', clip, what: describeMap(clip.map), middle, dx: NaN, dy: NaN,
+            selection: NOTHING,
+        };
+        this.gesture = g;
+        editor.message = '';
+        const at = this.pointer ?? { sx: view.width / 2, sy: view.height / 2 };
+        this.updatePaste(g, at.sx, at.sy);
+        this.redraw();
+    }
+
+    // The paste moved so its middle is at the pointer: by whole grid steps, so what was on the
+    // grid stays on it, and all of it on the map.
+    private updatePaste(g: Paste, sx: number, sy: number) {
+        const { editor } = this;
+        const p = this.view.toWorld(sx, sy);
+        const step = editor.grid || 1;
+        let dx = Math.round((p.x - g.middle.x) / step) * step;
+        let dy = Math.round((p.y - g.middle.y) / step) * step;
+        for (const q of g.clip.map.vertices) {
+            dx = Math.min(COORD_MAX - q.x, Math.max(-q.x, dx));
+            dy = Math.min(COORD_MAX - q.y, Math.max(-q.y, dy));
+        }
+        this.placePaste(g, dx, dy);
+    }
+
+    // The paste moved by dx, dy into the document, unless it's there already.
+    private placePaste(g: Paste, dx: number, dy: number) {
+        const { editor } = this;
+        const base = editor.doc;
+        if (dx === g.dx && dy === g.dy && base === g.base) {
+            return;
+        }
+        g.dx = dx;
+        g.dy = dy;
+        g.base = base;
+        g.result = this.attempt(() => pasteMap(base, g.clip, dx, dy, editor.defaults));
+        g.selection = new Set(g.result?.added ?? []);
+    }
+
+    // Put the paste down where it floats, selected.
+    private putDown(g: Paste) {
+        const { editor } = this;
+        this.placePaste(g, g.dx, g.dy);    // into the document as it is now
+        if (!g.result) {
+            return;    // it can't go there: the status line says why
+        }
+        this.gesture = { kind: 'idle' };
+        editor.commit(g.result.doc, g.result.added);
+        editor.tell(`pasted ${g.what}`);
+    }
+
     // Delete the selected edges, leaving their vertices selected; with none, the vertices.
     private deleteSelection() {
         const { editor } = this;
@@ -612,7 +776,11 @@ export class PlanView {
 
     // What to show: the document, or what an edit under way would make of it.
     shown(): { doc: Doc; selection: Selection } {
-        const g = this.gesture;
+        const g = this.gesture.kind === 'pan' && this.gesture.resume
+            ? this.gesture.resume : this.gesture;
+        if (g.kind === 'paste' && g.result) {
+            return { doc: g.result.doc, selection: g.selection };
+        }
         if (g.kind === 'move' && g.result) {
             return { doc: g.result.doc, selection: mapSelection(g.moving, g.result.vertexMap) };
         }
@@ -631,6 +799,10 @@ export class PlanView {
     }
 
     private draw() {
+        if (this.gesture.kind === 'paste') {
+            const g = this.gesture;
+            this.placePaste(g, g.dx, g.dy);    // into the document as it is now
+        }
         this.measure();
         const { canvas, view } = this;
         const dpr = window.devicePixelRatio || 1;
@@ -795,7 +967,7 @@ export class PlanView {
         }
 
         this.canvas.style.cursor = g.kind === 'pan' ? 'grabbing'
-            : g.kind === 'move' ? 'move'
+            : g.kind === 'move' || g.kind === 'paste' ? 'move'
             : this.selecting ? 'default' : 'crosshair';
         this.report(this.status(doc, selection, placing?.at ?? putting));
         for (const listener of this.drawn) {
@@ -902,14 +1074,9 @@ export class PlanView {
     // The status line; pointed is where a click would place a vertex or put the start.
     private status(doc: Doc, selection: Selection, pointed: Vertex | undefined): string {
         const { editor } = this;
-        const { map } = doc;
-        const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-        const counts = (v: number, e: number, z: number) => [
-            count(v, 'vertex', 'vertices'), count(e, 'edge', 'edges'), count(z, 'zone', 'zones'),
-        ].join(', ');
         const parts = [
             this.selecting ? 'Select' : this.playing ? 'Player' : 'Geometry',
-            counts(map.vertices.length, map.edges.length, map.zones.length)
+            describeMap(doc.map)
                 + (editor.showCells ? `, ${count(openCells(doc).length, 'cell', 'cells')}` : ''),
         ];
         if (selection.size) {
@@ -932,6 +1099,9 @@ export class PlanView {
         }
         if (g.kind === 'player') {
             parts.push(`facing ${g.start.angle}`);
+        }
+        if (g.kind === 'paste') {
+            parts.push(`pasting ${g.what}: click to put it down, Esc to cancel`);
         }
         if (this.hint) {
             parts.push(this.hint);
