@@ -178,7 +178,8 @@ the 3D view's own.
 | Wheel | Zooms both views |
 | Right or middle drag | Pans both views |
 
-Every surface shows from one side only, so from outside the map you see into it. An edge
+Every surface shows from one side only, so from outside the map you see into it: a wall,
+riser or lintel seen from behind shows only as a fainter outline, its wireframe. An edge
 draws a wall between an open zone and the outside or a solid zone, in its top shade; a riser
 where two floors differ, seen from the lower, in its bottom shade; and a lintel where two
 ceilings differ, seen from the higher, in its top shade. Floors face up and ceilings down. A

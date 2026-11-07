@@ -20,7 +20,7 @@
                     "regexp": "^never matches$"
                 },
                 "background": {
-                    "activeBegins": true,
+                    "activeOnStart": true,
                     "beginsPattern": "VITE",
                     "endsPattern": "ready in"
                 }

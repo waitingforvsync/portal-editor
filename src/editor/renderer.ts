@@ -1,7 +1,8 @@
 // renderer.ts - draws a scene (scene.ts) with WebGL2. Surfaces show only their front, in their
 // shades: dithered as the engine draws them, each 4x2 tile laid on the screen's own pixels,
 // or in the tiles' average colours. Outlines run along the surfaces' edges where the surface
-// faces the eye, and overlay lines (markers) go on top.
+// faces the eye, and fainter round walls, risers and lintels seen from behind, as wireframe;
+// overlay lines (markers) go on top.
 
 import { HARDWARE_RGB, NUM_SHADES, shadeTile } from '../map/shades';
 import type { Camera, Vec3 } from './camera';
@@ -13,6 +14,7 @@ export const HOVER = 2;
 export const MARKER = 4;    // overlay lines only: the start
 
 const BACKGROUND = [0.105, 0.122, 0.149];
+const BEHIND_ALPHA = '0.6';    // a surface seen from behind: its outline's opacity, scaled
 
 const SURFACE_VERTEX = `#version 300 es
 layout(location = 0) in vec3 position;
@@ -62,7 +64,8 @@ void main() {
     colour = vec4(c, 1.0);
 }`;
 
-// A line goes where its surface faces the eye; a line with no normal goes everywhere.
+// A line goes where its surface faces the eye, and round an upright surface (a wall, riser or
+// lintel) seen from behind; a line with no normal goes everywhere.
 const LINE_VERTEX = `#version 300 es
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -70,10 +73,13 @@ layout(location = 2) in float flags;
 uniform mat4 matrix;
 uniform vec3 eye;
 flat out int vFlags;
+flat out int vBehind;
 void main() {
     vFlags = int(flags);
-    bool seen = dot(normal, normal) == 0.0 || dot(normal, eye - position) > 0.0;
-    gl_Position = seen ? matrix * vec4(position, 1.0) : vec4(0.0, 0.0, 2.0, 1.0);
+    bool facing = dot(normal, normal) == 0.0 || dot(normal, eye - position) > 0.0;
+    vBehind = facing ? 0 : 1;
+    gl_Position = facing || normal.z == 0.0 ? matrix * vec4(position, 1.0)
+        : vec4(0.0, 0.0, 2.0, 1.0);
 }`;
 
 const LINE_FRAGMENT = `#version 300 es
@@ -81,6 +87,7 @@ precision highp float;
 precision highp int;
 uniform bool flaggedOnly;
 flat in int vFlags;
+flat in int vBehind;
 out vec4 colour;
 void main() {
     if ((vFlags & ${MARKER}) != 0) {
@@ -93,6 +100,9 @@ void main() {
         discard;
     } else {
         colour = vec4(0.85, 0.87, 0.9, 0.3);
+    }
+    if (vBehind != 0) {
+        colour.a *= ${BEHIND_ALPHA};
     }
 }`;
 
